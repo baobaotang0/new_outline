@@ -1,0 +1,174 @@
+{
+  "devices": [
+    {
+      "name": "odr_1",
+      "serial_number": "207B368B5550"
+    },
+    {
+      "name": "odr_2",
+      "serial_number": "2084367A5753"
+    },
+    {
+      "name": "odr_3",
+      "serial_number": "206C36795753"
+    }
+  ],
+  "motors": [
+    {
+      "id": 1,
+      "device_name": "odr_1",
+      "axis": 1,
+      "model": "80LCB075C",
+      "basic": {
+        "type": "LINE",
+        "ratio": 20.0,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": false
+      },
+      "homing": {
+        "acc": 0.1,
+        "vel": 0.1,
+        "cur": 19.0,
+        "hit_abs": 6.426,
+        "range0": 0.75,
+        "range1": 6.35
+      },
+      "motion": {
+        "acc": 0.5,
+        "dec": 0.5,
+        "vel": 0.3
+      }
+    },
+    {
+      "id": 2,
+      "device_name": "odr_1",
+      "axis": 0,
+      "model": "80LCB075C",
+      "basic": {
+        "type": "LINE",
+        "ratio": 32.0,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": true
+      },
+      "homing": {
+        "acc": 0.1,
+        "vel": 0.05,
+        "cur": 15.0,
+        "hit_abs": 1.935,
+        "range0": 0.96,
+        "range1": 1.78
+      },
+      "motion": {
+        "acc": 0.3,
+        "dec": 0.3,
+        "vel": 0.2
+      }
+    },
+    {
+      "id": 3,
+      "device_name": "odr_2",
+      "axis": 0,
+      "model": "80LCB075C",
+      "basic": {
+        "type": "LINE",
+        "ratio": 32.0,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": false
+      },
+      "homing": {
+        "acc": 0.1,
+        "vel": 0.05,
+        "cur": 8,
+        "hit_abs": 1.343,
+        "range0": 0.85,
+        "range1": 1.315
+      },
+      "motion": {
+        "acc": 0.2,
+        "dec": 0.2,
+        "vel": 0.1
+      }
+    },
+    {
+      "id": 4,
+      "device_name": "odr_2",
+      "axis": 1,
+      "model": "60LCB060C",
+      "basic": {
+        "type": "ROTATE",
+        "ratio": 200.0,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": true
+      },
+      "homing": {
+        "acc": 10.0,
+        "vel": -10.0,
+        "cur": 6.0,
+        "hit_abs": -154.5,
+        "range0": -125.0,
+        "range1": 125.0
+      },
+      "motion": {
+        "acc": 60.0,
+        "dec": 60.0,
+        "vel": 35.0
+      }
+    },
+    {
+      "id": 5,
+      "device_name": "odr_3",
+      "axis": 0,
+      "model": "60LCB040C",
+      "basic": {
+        "type": "ROTATE",
+        "ratio": 4.3333,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": true
+      },
+      "homing": {
+        "acc": 30.0,
+        "vel": 30.0,
+        "cur": 10.0,
+        "hit_abs": 0,
+        "range0": -99999999.0,
+        "range1": 999999999.0
+      },
+      "motion": {
+        "acc": 360.0,
+        "dec": 360.0,
+        "vel": 180.0
+      }
+    },
+    {
+      "id": 6,
+      "device_name": "odr_3",
+      "axis": 1,
+      "model": "60LCB020C",
+      "basic": {
+        "type": "ROTATE",
+        "ratio": 22.0,
+        "gear_d": 0.05305,
+        "gpio_bcm": 0,
+        "reverse": false
+      },
+      "homing": {
+        "acc": 10.0,
+        "vel": -10.0,
+        "cur": 2.50,
+        "hit_abs": -107.10,
+        "range0": -90.0,
+        "range1": 80.0
+      },
+      "motion": {
+        "acc": 180.0,
+        "dec": 180.0,
+        "vel": 60.0
+      }
+    }
+  ]
+}

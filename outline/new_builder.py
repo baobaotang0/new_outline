@@ -3,7 +3,8 @@ from matplotlib import pyplot
 from shapely.geometry import MultiPoint, LineString
 from build_outline import load_outline
 from build_tools import find_horline_circle_intersection, interpolate, \
-    build_circle, calculate_dis, find_horline_outline_intersection, find_2verline_outline_intersection
+    build_circle, calculate_dis, find_horline_outline_intersection, find_2verline_outline_intersection,\
+    calculate_angle
 from vtktool.vtktool import vtk_show, point_actor, line_actor
 from scipy.spatial.distance import pdist
 
@@ -117,26 +118,16 @@ if __name__ == '__main__':
                 for i in range(idx_cur[-1][0], idx_r4_min[1][0]):
                     origin_straight[1].append(find_horline_circle_intersection(center=outline[i], radius=l1_length,
                                                                                line_y=motor_range[2][0])[1])
-                    r4_origin_straight[1].append(math.degrees(math.asin(
-                        (outline[i][1] - motor_range[2][0]) / calculate_dis(
-                            point1=[origin_straight[1][-1], motor_range[2][0]],
-                            point2=outline[i]))))
-            if r4_origin_straight[0]:
-                r4_cur = [r4_origin_straight[0][-1]]
-            else:
-                r4_cur = [180]
+
+                    r4_origin_straight[1].append(calculate_angle([origin_straight[1][-1], motor_range[2][0]],
+                                                                 outline[i]))
+
+
             origin_cur = []
             last_dir = None
 
-                # if curvity >= 10:
-                #     turning_points[i] = cur_dir[1]
-                #     continue
-                # if cur_dir:
-                #     if last_dir:
-                #         if last_dir[1] != cur_dir[1]:
-                #             round_boundary.append(last_dir[0])
-                #     last_dir = cur_dir
-            curvity = []
+
+            curvity = [0]
             for i in range(idx_cur[0][0], idx_cur[1][0]):
                 vector1 = [(outline[i - 1][0] - outline[i][0]) / calculate_dis(outline[i - 1], outline[i]),
                            (outline[i - 1][1] - outline[i][1]) / calculate_dis(outline[i - 1], outline[i])]
@@ -145,25 +136,39 @@ if __name__ == '__main__':
                 if vector2[1] + vector1[1] < -0.0001:
                     curvity.append(math.degrees(math.acos(abs(1 - pdist([vector1, vector2], 'cosine')[0]))))
                 else:
-                    curvity.append(0)
+                    curvity.append(curvity[-1])
+            total_curvity = sum(curvity)
+            avg_curvity  =total_curvity/len(curvity)
 
-                direction = [vector1[0] + vector2[0], vector1[1] + vector2[1]]
-                local_length = math.sqrt(direction[0] ** 2 + direction[1] ** 2)
-                if local_length == 0:
-                    r4_cur.append(math.degrees(math.asin(vector2[1]))+90)
-                    # r4_cur.append(r4_cur[-1])
+            start_angle = calculate_angle(idx_origin_cur_offset[-1][1], idx_cur[0][1], smaller_than_0=False)
+            end_angle = calculate_angle(idx_origin_cur_offset[0][1], idx_cur[-1][1], smaller_than_0=False)
+            total_angle = end_angle-start_angle
+            print(start_angle,end_angle)
+            r4_cur = [start_angle]
+            for i in range(1,len(curvity)):
+                r4_cur.append(r4_cur[-1]+ curvity[i] / total_curvity * total_angle)
+                # r4_cur.append(start_angle+ i*avg_curvity/total_curvity * total_angle)
+            for i in range(idx_cur[0][0], idx_cur[1][0]):
+                origin_cur.append([outline[i][0]-math.cos(math.radians(r4_cur[i-idx_cur[0][0]]))*l1_length,
+                               outline[i][1]-math.sin(math.radians(r4_cur[i-idx_cur[0][0]]))*l1_length])
 
-                else:
-                    direction = [direction[0] / local_length, direction[1] / local_length]
-                    if direction[1]>0:
-                        r4_cur.append(math.degrees(math.acos(direction[0])))
-                    else:
-                        r4_cur.append(180 - math.degrees(math.acos(direction[0])))
-                origin_cur.append([outline[i][0]-math.cos(math.radians(r4_cur[-1]))*l1_length,
-                                   outline[i][1]-math.sin(math.radians(r4_cur[-1]))*l1_length])
-            pyplot.plot(curvity)
-            pyplot.show()
+                # direction = [vector1[0] + vector2[0], vector1[1] + vector2[1]]
+                # local_length = math.sqrt(direction[0] ** 2 + direction[1] ** 2)
+                # if local_length == 0:
+                #     r4_cur.append(math.degrees(math.asin(vector2[1]))+90)
+                #     # r4_cur.append(r4_cur[-1])
+                #
+                # else:
+                #     direction = [direction[0] / local_length, direction[1] / local_length]
+                #     if direction[1]>0:
+                #         r4_cur.append(math.degrees(math.acos(direction[0])))
+                #     else:
+                #         r4_cur.append(180 - math.degrees(math.acos(direction[0])))
+
+            # pyplot.plot(curvity)
+            # pyplot.show()
             pyplot.plot(origin_straight[0]+[i[0] for i in origin_cur]+origin_straight[1])
+            pyplot.plot([i[0] for i in origin_cur])
             pyplot.show()
             pyplot.plot(r4_origin_straight[0] + r4_cur + r4_origin_straight[1])
             pyplot.show()

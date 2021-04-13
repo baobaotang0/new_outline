@@ -1,5 +1,5 @@
 from matplotlib import pyplot
-from math import sqrt, e, degrees, atan, pi, cos, tan, sin
+from math import sqrt, e, degrees, atan, pi, cos, tan, sin, radians
 from pickle import load
 from offset import get_motor_max_para, calculate_motor_send_interval, is_postive
 from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
@@ -10,16 +10,20 @@ motor = [0, 1, 3]
 motor_max = get_motor_max_para("bot1.json")
 vmax_value = [motor_max[num]["vel"] for num in range(1, 7)]
 a_value = [motor_max[num]["acc"] for num in range(1, 7)]
+vmax_value[3] = radians(vmax_value[3])
+a_value[3] = radians(a_value[3])
 
 def car_loader():
     root_path = "./data/"
     for filename in os.listdir(root_path):
         file_path = root_path + filename
         if file_path[-4:] == ".npy":
+            # if "21" not in file_path:
+            #     continue
             with open(file_path, 'rb') as f_pos:
                 print(file_path)
-                time_step, r4, xy = load(f_pos)
-                yield time_step, r4, xy
+                time_step, r4, xy, outline = load(f_pos)
+                yield time_step, r4, xy, outline
 
 
 def compute_one(cmt_t, cmd1, vmax, acc):
@@ -41,7 +45,7 @@ def real_compute(cmt_t, cmd_all):
     v = [[0] for i in range(6)]
     offset = [[0] for i in range(6)]
     for num in motor:
-        for i in range(1, len(cmt_t) + 1):
+        for i in range(1, len(cmt_t)+1):
             time_list, spd_list, run_type = build_math_path(v[num][i - 1], vmax_value[num], pos[num][i - 1],
                                                             cmd_all[num][i], a_value[num], a_value[num])
             pos_step = get_pos_by_ts(cmt_t[i - 1], time_list, spd_list)[0]
@@ -122,12 +126,12 @@ def f1(cmd, t, acc):
         else:
             acc_list[i] += acc_cur
 
-    for i in change_list:
-        p0 = cmd1[i-1]
-        p1 = cmd1[i]
-        v1 = (p1 - p0) / (t[i] - t[i - 1])
-        v2 = (t[i + 2] - t[i]) / 2 * acc_list[i] + v1
-        cmd1[i + 1] = p1 + v2 * (t[i + 1] - t[i])
+    # for i in change_list:
+    #     p0 = cmd1[i-1]
+    #     p1 = cmd1[i]
+    #     v1 = (p1 - p0) / (t[i] - t[i - 1])
+    #     v2 = (t[i + 2] - t[i]) / 2 * acc_list[i] + v1
+    #     cmd1[i + 1] = p1 + v2 * (t[i + 1] - t[i])
 
     low = min(cmd1)
     high = max(cmd1)
@@ -140,7 +144,7 @@ def f1(cmd, t, acc):
     return cmd1
 
 
-def f2():
+def f2(o, t, a_value):
     a_list_all = []
     for o1, a in zip(o, a_value):
         length = len(o1)
@@ -177,25 +181,54 @@ def func(delta_t, s0, a, t):
     return -0.5 * a * (t - delta_t) ** 2 + s0
 
 if __name__ == '__main__':
-    for time_step, r4, xy in car_loader():
+    l1_length = 0.5629
+    root_path = "./data/"
+    # pyplot.figure(figsize=(7, 3))
+    # with open("data_for_f5_front_top", 'rb') as f_pos:
+    #     time_step_real, o_real, res_o, outline_real = load(f_pos)
+    # t = []
+    # for i in range(len(time_step_real)):
+    #     t.append(sum(time_step_real[:i + 1]))
+    # res_o =[]
+    # for o1, a in zip(o_real, a_value):
+    #     o2 = f1(o1, t, a)
+    #     res_o.append(o2)
+    # p = real_compute(time_step_real, o_real)
+    # new_p = real_compute(time_step_real, res_o)
+    # pyplot.plot([p[0][i] + cos(radians(p[3][i]+90)) * l1_length for i in range(len(p[0]))],
+    #             [p[1][i] + sin(radians(p[3][i]+90)) * l1_length for i in range(len(p[0]))], "g")
+    # pyplot.plot([new_p[0][i] + cos(radians(new_p[3][i]+90)) * l1_length for i in range(len(new_p[0]))],
+    #             [new_p[1][i] + sin(radians(new_p[3][i]+90)) * l1_length for i in range(len(new_p[0]))],"m")
+    # pyplot.plot([i[0] for i in outline_real],
+    #             [i[1] for i in outline_real],"c")
+
+    for time_step, r4, xy, outline in car_loader():
     # with open("./data/car_03.npy", 'rb') as f_pos:
     #     time_step, r4, xy = load(f_pos)
 
         t, o, p = base_creator()
-        pyplot.plot(o[0],o[1])
-        pyplot.xlim((1,6))
-        pyplot.ylim((0, 5))
-        pyplot.show()
+        # pyplot.plot(o[0],o[1])
 
-        for n in motor:
-            pyplot.plot(t, o[n], 'b')
-            pyplot.plot(t, p[n], 'r')
 
-            a_all = f2()
-            # pyplot.plot(t, a_all[n], 'g')
-
+        # pyplot.show()
+        a_all = f2(o, t, a_value)
+        for n in [3]:
             new_o = new_cmd_pos()
             new_p = real_compute(time_step, new_o)
+            pyplot.plot(t, o[n], 'b')
+            pyplot.plot(t, p[n], 'r')
+            # pyplot.plot(t, a_all[n], 'g')
             # pyplot.plot(t, new_o[n], 'g')
             pyplot.plot(t, new_p[n], 'y')
             pyplot.show()
+
+        #
+        # pyplot.plot([p[0][i] + cos(p[3][i])*l1_length for i in range(len(p[0]))],
+        #             [p[1][i] + sin(p[3][i])*l1_length for i in range(len(p[0]))], "r")
+        # pyplot.plot([new_p[0][i] + cos(new_p[3][i])*l1_length for i in range(len(new_p[0]))],
+        #             [new_p[1][i] + sin(new_p[3][i])*l1_length for i in range(len(new_p[0]))],"y")
+        # pyplot.plot([i[0] for i in outline], [i[1] for i in outline], "b--")
+        #
+        # pyplot.xlim((0,7))
+        # pyplot.ylim((0, 3))
+        # pyplot.show()

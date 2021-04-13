@@ -87,3 +87,13 @@ def find_2verline_outline_intersection(outline: list, x_range: list, start_idx=N
     return [idx_left, idx_right]
 
 
+def calculate_angle(point1: list, point2: list, smaller_than_0=True) -> float:
+    vector = [point2[0]-point1[0], point2[1]-point1[1]]
+    if vector[1] < 0:
+        if smaller_than_0:
+            angle = math.degrees( - math.acos(vector[0] / calculate_dis(point1, point2)))
+        else:
+            angle = math.degrees(2*math.pi - math.acos(vector[0]/calculate_dis(point1,point2)))
+    else:
+        angle = math.degrees(math.acos(vector[0] / calculate_dis(point1, point2)))
+    return angle

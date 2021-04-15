@@ -23,9 +23,6 @@ def takeFirst(elem):
     return elem[0]
 
 
-def takeSecondFirst(elem):
-    return elem[1][0]
-
 
 if __name__ == '__main__':
     # motor_range[4] = [motor_range[4][0]+90, motor_range[4][1]+90]

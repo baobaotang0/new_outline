@@ -1,12 +1,12 @@
-import copy
 import os
-from math import radians, cos, sin
+from math import radians, cos, sin, sqrt
 from pickle import load
 
 import numpy
 from matplotlib import pyplot
 
-from offset import get_motor_max_para, is_postive
+from offset import get_motor_max_para
+from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
 
 motor = [0, 1, 3]
 time_step_min = 0.1
@@ -40,8 +40,6 @@ def car_loader():
                 print(file_path)
                 time_step, r4, xy, outline = load(f_pos)
                 yield time_step, r4, xy, outline
-
-
 
 
 def check_acc(ts: list, s: list, v: list, amax: list, check_list: list):
@@ -80,30 +78,76 @@ def insert_one(ts: list, s: list, check_list: list):
             s[num].insert(check_list[i] + i + 1, local_s / 2)
 
 
+def line_filter(time_step, source, limit_acc):
+    length1 = len(source)
+    vel_list = []
+    for i in range(length1 - 1):
+        vel = (source[i + 1] - source[i]) / time_step[i]
+        vel_list.append(vel)
 
-def make_even(ts: list, s: list, v: list, amax: list, check_point: list):
-    num, i = check_point[0], check_point[1]
-    s_sum = sum(s[num][i - 1:i + 2])
-    a = amax[num]
-    vl, vr = v[num][i - 2], v[num][i + 2]
-    tl, t1, t2, t3, tr = ts[i - 2], ts[i - 1], ts[i], ts[i + 1], ts[i + 2]
-    line1_a, line1_b = 1 / t1 + 1 / t2, 1 / t2
-    line1_c = [s_sum / t2 - a * (t1 + t2) / 2, s_sum / t2 + a * (t1 + t2) / 2]
-    line2_a, line2_b = 1 / t2, 1 / t2 + 1 / t3
-    line2_c = [s_sum / t2 - a * (t3 + t2) / 2, s_sum / t2 + a * (t3 + t2) / 2]
-    boundary_s1 = [(vl - a * (tl + t1) / 2) * t1, (vl + a * (tl + t1) / 2) * t1]
-    boundary_s3 = [(vr - a * (tr + t3) / 2) * t1, (vr + a * (tr + t3) / 2) * t3]
-    x = numpy.linspace(-s_sum, s_sum, 1000)
-    pyplot.plot(x, [(line1_c[0] - line1_a * j) / line1_b for j in x])
-    pyplot.plot(x, [(line1_c[1] - line1_a * j) / line1_b for j in x])
-    pyplot.plot(x, [(line2_c[0] - line2_a * j) / line2_b for j in x])
-    pyplot.plot(x, [(line2_c[1] - line2_a * j) / line2_b for j in x])
-    pyplot.plot(x, [(line2_c[1] - line2_a * j) / line2_b for j in x])
-    pyplot.plot([boundary_s1[0] for j in x], x)
-    pyplot.plot([boundary_s1[1] for j in x], x)
-    pyplot.plot(x, [boundary_s3[0] for j in x])
-    pyplot.plot(x, [boundary_s3[1] for j in x])
-    pyplot.show()
+    acc_list = []
+    for i in range(length1 - 2):
+        acc = (vel_list[i + 1] - vel_list[i]) / (time_step[i + 1] + time_step[i]) * 2
+        acc_list.append(acc)
+    # 开始操作
+    window = 1
+    acc_adv_list = [0] * (length1 - 2)
+    acc_adv_list[:window] = acc_list[:window]
+    acc_adv_list[-window:] = acc_list[-window:]
+    '''超级劣化版'''
+    change_list = set()
+    for i in range(window, length1 - 2 - window):
+        acc_raw = acc_list[i]
+        if abs(acc_raw) > limit_acc:
+            for j in range(i - window, i + window + 1):
+                d = window + 1 - abs(i - j)
+                acc_new = acc_raw * d / (window + 1) / (window + 1)
+                acc_adv_list[j] += acc_new
+                change_list.add(j + 1)
+        else:
+            acc_adv_list[i] = acc_raw
+
+    check_dict = {}
+    for i in range(length1 - 2):
+        for acc in acc_adv_list:
+            if abs(acc) > limit_acc:
+                check_dict[i] = sqrt(abs(acc) / limit_acc)
+
+    new_tar = source.copy()
+    for i in range(1, length1 - 1):
+        if i in change_list:
+            v0 = (new_tar[i] - new_tar[i - 1]) / time_step[i - 1]
+            v1 = v0 + acc_adv_list[i - 1] * (time_step[i] + time_step[i - 1]) / 2
+            s = v1 * time_step[i]
+            new_tar[i+1] = new_tar[i] + s
+
+    new_ts = time_step.copy()
+    for idx, r in check_dict.items():
+        new_ts[idx] *= r
+
+    return new_ts, new_tar
+
+def real_compute(cmt_t, cmd_all):
+    pos = [[cmd_all[0][0]], [cmd_all[1][0]], [], [cmd_all[3][0]], [], []]
+    v = [[0] for i in range(6)]
+    offset = [[0] for i in range(6)]
+    tl = [[] for i in range(6)]
+    spdl = [[] for i in range(6)]
+    a = [[] for i in range(6)]
+    for num in motor:
+        for i in range(1, len(cmt_t) + 1):
+            res = build_math_path(v[num][i - 1], vmax_value[num], pos[num][i - 1],
+                                  cmd_all[num][i], a_value[num], a_value[num])
+            tl[num].append(res[0])
+            spdl[num].append(res[1])
+            pos_step = get_pos_by_ts(cmt_t[i - 1], tl[num][-1], spdl[num][-1])[0]
+            pos[num].append(pos[num][i - 1] + pos_step)
+            offset[num].append(pos[num][i] - cmd_all[num][i])
+            v[num].append(get_math_spd_by_ts(cmt_t[i - 1], tl[num][-1], spdl[num][-1])[0])
+            a[num].append((v[num][-1] - v[num][-2]) / cmt_t[i - 1])
+    return pos, tl, spdl, v, a
+
+
 
 
 if __name__ == '__main__':
@@ -113,6 +157,11 @@ if __name__ == '__main__':
         order[0] = [x[0] for x in xy]
         order[1] = [x[1] for x in xy]
         order[3] = r4
+        # 计算绝对时间
+        t = [0]
+        for i in range(len(time_step)):
+            t.append(t[i] + time_step[i])
+
         s = [[] for i in range(6)]
         v_assume = [[] for i in range(6)]
         a_assume = [[] for i in range(6)]
@@ -129,10 +178,26 @@ if __name__ == '__main__':
                     # check_list.append([num, i])
                     check_list.append(i)
         print(check_list)
+        new_order = [[]for i in range(6)]
+        for num in motor:
+            new_time_step, new_order[num] = line_filter(time_step, order[num], a_value[num])
+        new_pos, tl, spdl, v, a = real_compute(new_time_step, new_order)
+        pos, tl, spdl, v, a = real_compute(time_step, order)
+        l1_length = 0.6471
+        pyplot.plot([new_order[0][i] + cos(new_order[3][i]) * l1_length for i in range(len(new_order[0]))],
+                    [new_order[1][i] + sin(new_order[3][i]) * l1_length for i in range(len(new_order[0]))], "go")
+        pyplot.plot([pos[0][i] + cos(pos[3][i]) * l1_length for i in range(len(pos[0]))],
+                    [pos[1][i] + sin(pos[3][i]) * l1_length for i in range(len(pos[0]))], "b*")
+        pyplot.plot([new_pos[0][i] + cos(new_pos[3][i]) * l1_length for i in range(len(new_pos[0]))],
+                    [new_pos[1][i] + sin(new_pos[3][i]) * l1_length for i in range(len(new_pos[0]))], "y*")
+        pyplot.plot([i[0] for i in outline], [i[1] for i in outline], "c*")
+        pyplot.plot([outline[i][0] for i in check_list], [outline[i][1] for i in check_list], "r*")
+        pyplot.show()
 
-        for i in check_list:
-            time_step[i] = sum(time_step[i-1:i+2])/3
-        # result =[]
+
+
+
+            # result =[]
         # for _, i in groupby(enumerate(check_list), lambda x: x[1] - x[0]):
         #     result.append([j for _, j in i])
         # check_list= set(check_list)
@@ -142,45 +207,33 @@ if __name__ == '__main__':
         # l = check_acc(time_step, s, a_value)
         # print(l)
         recheck_list = []
-        # new_v_assume = copy.deepcopy(v_assume)
-        # new_a_assume = [[] for i in range(6)]
 
-        # for num in motor:
-        #     new_a_assume[num] = [
-        #         (new_v_assume[num][i + 1] - new_v_assume[num][i]) / (time_step[i] + time_step[i + 1]) * 2
-        #         for i in range(len(time_step) - 1)]
-        #     for i in range(len(new_a_assume[num])):
-        #         if abs(new_a_assume[num][i]) > a_value[num]:
-        #             print(num, i, new_a_assume[num][i])
-        #             print(new_v_assume[num][i - 1], new_v_assume[num][i], new_v_assume[num][i + 1])
-        #             recheck_list.append(i)
-
-        # recheck_list = []
         new_v_assume = [[] for i in range(6)]
         new_a_assume = [[] for i in range(6)]
         for num in motor:
-            new_v_assume[num] = [(s[num][i]) / time_step[i] for i in range(len(time_step))]
-            new_a_assume[num] = [(new_v_assume[num][i + 1] - new_v_assume[num][i]) / (time_step[i] + time_step[i + 1]) * 2 for i in
-                             range(len(time_step) - 1)]
+            new_v_assume[num] = [(new_order[num][i+1]-new_order[num][i]) / new_time_step[i] for i in range(len(new_time_step))]
+            new_a_assume[num] = [
+                (new_v_assume[num][i + 1] - new_v_assume[num][i]) / (new_time_step[i] + new_time_step[i + 1]) * 2 for i in
+                range(len(new_time_step) - 1)]
             for i in range(len(new_a_assume[num])):
                 if abs(new_a_assume[num][i]) > a_value[num]:
-                    print(num, i,new_a_assume[num][i])
-                    print(new_v_assume[num][i],new_v_assume[num][i+1])
-                    print(s[num][i], time_step[i], s[num][i + 1], time_step[i + 1])
+                    print(num, i, new_a_assume[num][i])
+                    print(new_v_assume[num][i], new_v_assume[num][i + 1])
+                    print(s[num][i], new_time_step[i], s[num][i + 1], new_time_step[i + 1])
+        # for num in motor:
+        #     for i in s[num]:
+        #         new_order[num].append(new_order[num][-1] + i)
                     recheck_list.append(i)
         print(recheck_list)
-        new_order = [[order[0][0]], [order[1][0]], [], [order[3][0]], [], []]
+        # new_order = [[order[0][0]], [order[1][0]], [], [order[3][0]], [], []]
+        #
 
-        for num in motor:
-            for i in s[num]:
-                new_order[num].append(new_order[num][-1] + i)
-
-        l1_length = 0.6471
-        pyplot.plot([new_order[0][i] + cos(new_order[3][i]) * l1_length for i in range(len(new_order[0]))],
-                    [new_order[1][i] + sin(new_order[3][i]) * l1_length for i in range(len(new_order[0]))], "go")
-        pyplot.plot([i[0] for i in outline], [i[1] for i in outline], "c*")
-        pyplot.plot([outline[i][0] for i in check_list], [outline[i][1] for i in check_list], "r*")
-        pyplot.show()
+        # l1_length = 0.6471
+        # pyplot.plot([new_order[0][i] + cos(new_order[3][i]) * l1_length for i in range(len(new_order[0]))],
+        #             [new_order[1][i] + sin(new_order[3][i]) * l1_length for i in range(len(new_order[0]))], "go")
+        # pyplot.plot([i[0] for i in outline], [i[1] for i in outline], "c*")
+        # pyplot.plot([outline[i][0] for i in check_list], [outline[i][1] for i in check_list], "r*")
+        # pyplot.show()
 
         for num in motor:
             if num == 3:
@@ -192,7 +245,4 @@ if __name__ == '__main__':
             pyplot.plot([i for i in recheck_list], [v_assume[num][i] for i in recheck_list], "D")
         pyplot.show()
 
-        # 计算绝对时间
-        t = [0]
-        for i in range(len(time_step)):
-            t.append(t[i] + time_step[i])
+

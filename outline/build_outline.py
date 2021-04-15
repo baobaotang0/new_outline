@@ -1,5 +1,5 @@
 import os, numpy, math
-import xpcl
+
 from matplotlib import pyplot
 from typing import List
 from vtktool.vtktool import vtk_show, point_actor, line_actor
@@ -64,11 +64,8 @@ def cut_xy_spline(xyz_list: list, lowest, cut_angle=45):
             if math.cos(angle) < -math.cos(math.radians(cut_angle)):
                 delete_indices.append(i)
     if len(delete_indices) == 0:
-        print('cut spline的裁剪高度参数错误！，进行随机高度裁剪')
-        rand_high = 0.2 + 0.6 * math.random()
-        for i in range(length):
-            if xyz_list[i][1] < y_min_max[0] + (y_min_max[1] - y_min_max[0]) * rand_high:
-                delete_indices.append(i)
+        print('cut spline的裁剪高度参数错误！')
+        return []
     # compute result
     del_min = delete_indices[-1]
     del_max = delete_indices[0]
@@ -129,6 +126,8 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
     folder_path = "2dcars/"
     car_id = os.listdir(folder_path)
     for i in car_id:
+        # if i != "2dcar_16.npy":
+        #     continue
         if i.endswith("npy"):
             print(i)
             path2d = "2dcars/" + i
@@ -150,11 +149,12 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
                     res_2d = [[i[0] for i in res], [i[1] for i in res]]
                 else:
                     res_2d = [[p[0], p[1]] for p in res]
-                yield res_2d, car
+                yield res_2d, new_car
 
 
 
 if __name__ == '__main__':
+    import xpcl
     folder_path = "cars"
     car_id = os.listdir(folder_path)
     rough_para = 0.8

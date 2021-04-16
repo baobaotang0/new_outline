@@ -5,7 +5,7 @@ from typing import List
 from vtktool.vtktool import vtk_show, point_actor, line_actor
 from shapely.geometry import MultiPoint, LineString
 from scipy import interpolate
-from build_tools import interpolate
+from build_tools import interpolate_by_stepLen
 
 
 
@@ -126,7 +126,7 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
     folder_path = "2dcars/"
     car_id = os.listdir(folder_path)
     for i in car_id:
-        # if i != "2dcar_16.npy":
+        # if i != "2dcar_23.npy":
         #     continue
         if i.endswith("npy"):
             print(i)
@@ -137,7 +137,7 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
                 for point in car:
                     if point[1] + dis > highest:
                         point[1] = highest - dis
-                new_car = interpolate(car, 0.05)
+                new_car = interpolate_by_stepLen(car, 0.05)
                 points = MultiPoint(new_car)
                 patch = points.buffer(rough_para)
                 patch = patch.buffer(dis - rough_para)

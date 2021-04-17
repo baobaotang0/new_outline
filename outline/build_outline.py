@@ -119,15 +119,12 @@ def xy_head_end_filter(xyz_list: List[List[float]]):
         xyz_list[i][0] = xyz_list[max_idx][0]
 
 
-
-
-
 def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
     folder_path = "2dcars/"
     car_id = os.listdir(folder_path)
     for i in car_id:
-        # if i != "2dcar_23.npy":
-        #     continue
+        if i == "2dcar_18.npy":
+            continue
         if i.endswith("npy"):
             print(i)
             path2d = "2dcars/" + i

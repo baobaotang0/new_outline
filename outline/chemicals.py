@@ -15,7 +15,7 @@ set_angle_to_normal = 10
 shoot_range_xy = .24
 dis_l1l1 = 0.1
 command_interval = 0.1
-l1_length = 0.6471
+l1_length = 0.35
 motor_velmax = {1: 0.3, 2: 0.2, 3: 0.1, 4: 20, 6: 20}
 time_step_min = .1
 
@@ -32,11 +32,11 @@ def get_straightline_outline(x_bds:list, r4_bds:list):
     outline = [[x[i] + math.cos(math.radians(r4[i])) * l1_length,
                      motor_range[2][0] + math.sin(math.radians(r4[i])) * l1_length]
                     for i in range(len(r4))]
+    origin = [[x[i], motor_range[2][0]] for i in range(len(x))]
     if outline[0][0]> outline[-1][0]:
         outline.reverse()
-    return outline
-
-
+        origin.reverse()
+    return outline, origin
 
 
 if __name__ == '__main__':
@@ -68,6 +68,7 @@ if __name__ == '__main__':
         new_car = unify_list(new_car)
         if len(new_car) >= 2:
             new_car = make_ends(new_car, motor_range[2][0])
+            new_car = interpolate_by_stepLen(new_car, time_step_min * motor_velmax[1])
             down_car_offset = []
             lines = LineString(new_car)
             patch = lines.parallel_offset(distance=l1_length, side="left")
@@ -82,19 +83,18 @@ if __name__ == '__main__':
             if down_car_offset[0][0]> down_car_offset[-1][0]:
                 down_car_offset.reverse()
             down_car_offset = interpolate_by_stepLen(down_car_offset, time_step_min * motor_velmax[1])
-            outline_left = get_straightline_outline(x_bds=[boundary[0][0][0], new_car[0][0]],
+            outline_left, origin_left = get_straightline_outline(x_bds=[boundary[0][0][0], new_car[0][0]],
                                             r4_bds=[boundary[0][1], calculate_angle(new_car[0], down_car_offset[0])])
-            outline_right = get_straightline_outline(x_bds=[new_car[-1][0], boundary[-1][0][0]],
+            outline_right, origin_right = get_straightline_outline(x_bds=[new_car[-1][0], boundary[-1][0][0]],
                                             r4_bds=[calculate_angle(new_car[-1], down_car_offset[-1]), boundary[-1][1]])
             chemicial_outline = round_connect([outline_left, down_car_offset, outline_right])
-
             # chemicial_outline = interpolate_by_stepLen(chemicial_outline, time_step_min * motor_velmax[1])
-            chemicial_origin = round_connect([boundary[0][0], new_car[0]], new_car + [new_car[-1], boundary[1][0]])
+            chemicial_origin = round_connect([origin_left, new_car, origin_right])
             # chemicial_origin = interpolate_by_stepLen(chemicial_origin, time_step_min * motor_velmax[1])
 
         else:
-            chemicial_origin = [boundary[0][0]] + [boundary[1][0]]
-            chemicial_origin = interpolate_by_stepLen(chemicial_origin, time_step_min * motor_velmax[1])
+            chemicial_outline, chemicial_origin = get_straightline_outline(x_bds=[boundary[0][0][0], boundary[1][0][0]],
+                                            r4_bds=[boundary[0][1], boundary[1][1]])
 
         # step_num, r4, x, y = [], [], [], []
         # for i in range(len(boundary) - 1):
@@ -109,22 +109,23 @@ if __name__ == '__main__':
 
         # pyplot.subplot(2, 1, 2)
         pyplot.figure(figsize=(7, 3))
+        pyplot.plot([p[0] for p in chemicial_origin], [p[1] for p in chemicial_origin], "b-*")
+        pyplot.plot([p[0] for p in chemicial_outline], [p[1] for p in chemicial_outline], "g-*")
         pyplot.plot([p[0] for p in outline], [p[1] for p in outline], "g--")
         pyplot.plot([p[0] for p in new_car], [p[1] for p in new_car])
         pyplot.plot([p[0] for p in car], [p[1] for p in car])
-        pyplot.plot([p[0] for p in chemicial_origin], [p[1] for p in chemicial_origin], "b")
-        pyplot.plot([p[0] for p in chemicial_outline], [p[1] for p in chemicial_outline], "g")
+
         # for i in range(len(r4)):
         #     pyplot.plot([x[i] + math.cos(math.radians(r4[i])) * l1_length, x[i]],
         #                 [y[i] + math.sin(math.radians(r4[i])) * l1_length, y[i]], "c")
         # pyplot.plot([x[i] + math.cos(math.radians(r4[i])) * l1_length for i in range(len(r4))],
         #             [y[i] + math.sin(math.radians(r4[i])) * l1_length for i in range(len(r4))])
-        # n = numpy.arange(len(up_car))
+        # n = numpy.arange(len(chemicial_origin))
         # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (up_car[i][0], up_car[i][1]))
-        # n = numpy.arange(len(down_car))
+        #     pyplot.annotate(txt, (chemicial_origin[i][0], chemicial_origin[i][1]))
+        # n = numpy.arange(len(chemicial_outline))
         # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (down_car[i][0], down_car[i][1]))
+        #     pyplot.annotate(txt, (chemicial_outline[i][0], chemicial_outline[i][1]))
 
         pyplot.plot([p[1][0] for p in idx_down_car], [p[1][1] for p in idx_down_car], "bo")
         pyplot.plot(motor_range[1], [motor_range[2][0], motor_range[2][0]])

@@ -1,11 +1,21 @@
-import math,numpy
+import math
+
+import numpy
+from matplotlib import pyplot
+
+
+def new_plot(l, style=None):
+    if style:
+        pyplot.plot([p[0] for p in l], [p[1] for p in l], style)
+    else:
+        pyplot.plot([p[0] for p in l], [p[1] for p in l])
 
 
 def takeFirst(elem):
     return elem[0]
 
 
-def is_postive(num: float):
+def is_positive(num: float):
     if num > 0:
         return 1
     elif num == 0:
@@ -14,12 +24,61 @@ def is_postive(num: float):
         return -1
 
 
+def is_monotonous(line: list):
+    res = True
+    for i in range(1, len(line) - 1):
+        if is_positive(line[i - 1] - line[i]) and is_positive(line[i - 1] - line[i]) == - is_positive(
+                line[i] - line[i + 1]):
+            res = False
+    return res
+
+
+def is_clockwise(xyz_list: list):
+    if xyz_list[-1] == xyz_list[0]:
+        xyz_list.pop()  # 因为曲线闭合，头尾点为同一点，所以少取一位
+    length = len(xyz_list)
+    d = 0
+    for i in range(length - 1):
+        d += -0.5 * (xyz_list[i + 1][1] + xyz_list[i][1]) * (xyz_list[i + 1][0] - xyz_list[i][0])
+    if d < 0:
+        clockwise = True
+    else:
+        clockwise = False
+    return clockwise
+
+
+def get_vector(point1, point2):
+    return [point2[0] - point1[0], point2[1] - point1[1]]
+
+
+def get_unit_vector(point1, point2):
+    return [get_vector(point1, point2)[0] / calculate_dis(point1, point2),
+            get_vector(point1, point2)[1] / calculate_dis(point1, point2)]
+
+
+def calculate_dis(point1: list, point2: list) -> float:
+    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
+
+def calculate_angle(point1: list, point2: list, smaller_than_0=True) -> float:
+    '''smaller_than_0 =True：-180～180；smaller_than_0 =False：0～360'''
+    vector = get_vector(point1, point2)
+    if vector[1] < 0:
+        if smaller_than_0:
+            angle = math.degrees(- math.acos(vector[0] / calculate_dis(point1, point2)))
+        else:
+            angle = math.degrees(2 * math.pi - math.acos(vector[0] / calculate_dis(point1, point2)))
+    else:
+        angle = math.degrees(math.acos(vector[0] / calculate_dis(point1, point2)))
+    return angle
+
+
 def interpolate_by_stepLen(outline: list, dis_step: float):
     vector = []
     dis = [0]
     for i in range(1, len(outline)):
-        vector.append([outline[i][0] - outline[i - 1][0], outline[i][1] - outline[i - 1][1]])
-        dis.append(dis[i - 1] + calculate_dis(outline[i-1], outline[i]))
+        vector.append(get_vector(outline[i - 1], outline[i]))
+        dis.append(dis[i - 1] + calculate_dis(outline[i - 1], outline[i]))
     count = int(dis[-1] // dis_step)
     j = 0
     res = []
@@ -31,7 +90,7 @@ def interpolate_by_stepLen(outline: list, dis_step: float):
             j += 1
         percent = (dis_cur - dis[j]) / (dis[j + 1] - dis[j])
         res.append([outline[j][0] + percent * vector[j][0], outline[j][1] + percent * vector[j][1]])
-    if calculate_dis(res[-1], outline[-1]) > dis_step/2:
+    if calculate_dis(res[-1], outline[-1]) > dis_step / 2:
         res.append(outline[-1])
     else:
         res[-1] = outline[-1]
@@ -42,9 +101,9 @@ def interpolate_by_stepNum(outline: list, dis_num: int):
     vector = []
     dis = [0]
     for i in range(1, len(outline)):
-        vector.append(get_vector(outline[i-1], outline[i]))
-        dis.append(dis[i - 1] + calculate_dis(outline[i-1], outline[i]))
-    dis_step = dis[-1]/(dis_num+1)
+        vector.append(get_vector(outline[i - 1], outline[i]))
+        dis.append(dis[i - 1] + calculate_dis(outline[i - 1], outline[i]))
+    dis_step = dis[-1] / (dis_num + 1)
     j = 0
     res = []
     for i in range(dis_num + 2):
@@ -56,12 +115,25 @@ def interpolate_by_stepNum(outline: list, dis_num: int):
     return res
 
 
-def get_vector(point1, point2):
-    return [point2[0]-point1[0], point2[1]-point1[1]]
+def interpolate_by_proportion(outline: list, scale: list):
+    vector = []
+    dis = [0]
+    for i in range(1, len(outline)):
+        vector.append(get_vector(outline[i - 1], outline[i]))
+        dis.append(dis[i - 1] + calculate_dis(outline[i - 1], outline[i]))
+    scale_dis = [0]
+    for i in range(1, len(scale)):
+        scale_dis.append(scale_dis[i - 1] + calculate_dis(scale[i - 1], scale[i]))
 
-
-def calculate_dis(point1: list, point2: list) -> float:
-    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+    dis_step = [i / scale_dis[-1] * dis[-1] for i in scale_dis]
+    j = 0
+    res = []
+    for i in dis_step:
+        while i - dis[j + 1] > 1e-6:
+            j += 1
+        percent = (i - dis[j]) / (dis[j + 1] - dis[j])
+        res.append([outline[j][0] + percent * vector[j][0], outline[j][1] + percent * vector[j][1]])
+    return res
 
 
 def find_horline_outline_intersection(outline: list, line_y: float, start_idx=None, end_idx=None, up=False):
@@ -92,31 +164,12 @@ def find_horline_outline_intersection(outline: list, line_y: float, start_idx=No
     return idx
 
 
-def calculate_angle(point1: list, point2: list, smaller_than_0=True) -> float:
-    '''smaller_than_0 =True：-180～180；smaller_than_0 =False：0～360'''
-    vector =  get_vector(point1,point2)
-    if vector[1] < 0:
-        if smaller_than_0:
-            angle = math.degrees(- math.acos(vector[0] / calculate_dis(point1, point2)))
-        else:
-            angle = math.degrees(2 * math.pi - math.acos(vector[0] / calculate_dis(point1, point2)))
-    else:
-        angle = math.degrees(math.acos(vector[0] / calculate_dis(point1, point2)))
-    return angle
-
-
-def is_clockwise(xyz_list: list):
-    if xyz_list[-1] == xyz_list[0]:
-        xyz_list.pop()  # 因为曲线闭合，头尾点为同一点，所以少取一位
-    length = len(xyz_list)
-    d = 0
-    for i in range(length - 1):
-        d += -0.5 * (xyz_list[i + 1][1] + xyz_list[i][1]) * (xyz_list[i + 1][0] - xyz_list[i][0])
-    if d < 0:
-        clockwise = True
-    else:
-        clockwise = False
-    return clockwise
+def build_cicle(center: list, radius: float, lineNum=12):
+    theta = numpy.linspace(0, math.pi * 2, lineNum)
+    res = []
+    for i in theta:
+        res.append([center[0] + math.cos(i) * radius, center[1] + math.sin(i) * radius])
+    return res
 
 
 def cut_outline_with_horline(outline: list, line_y: float):
@@ -172,7 +225,7 @@ def make_ends(line: list, line_y: float):
     horline = [0, 1, -line_y]
     line.insert(0, get_2line_intersection(line1, horline))
     line.append(get_2line_intersection(line2, horline))
-    print(line[-2],line[-1])
+    print(line[-2], line[-1])
     return line
 
 
@@ -182,8 +235,8 @@ def get_line_function_with_2points(point1: list, point2: list) -> list:
     else:
         line_sin_theta = (point1[1] - point2[1]) / calculate_dis(point1, point2)
         line_cos_theta = (point1[0] - point2[0]) / calculate_dis(point1, point2)
-        res=[line_sin_theta, -line_cos_theta, -line_sin_theta * point1[0] + line_cos_theta * point1[1]]
-        if line_sin_theta < 0 or ( line_sin_theta== 0 and -line_cos_theta < 0):
+        res = [line_sin_theta, -line_cos_theta, -line_sin_theta * point1[0] + line_cos_theta * point1[1]]
+        if line_sin_theta < 0 or (line_sin_theta == 0 and -line_cos_theta < 0):
             res = [-i for i in res]
     return res
 
@@ -215,6 +268,38 @@ def unify_list(list):
     return res
 
 
+def offset(original_line: list, radius: float, left: bool):
+    if left:
+        rotate = 90
+    else:
+        rotate = -90
+    angle0 = calculate_angle(original_line[0], original_line[1]) + rotate
+    vector0 = [math.cos(math.radians(angle0)) * radius, math.sin(math.radians(angle0)) * radius]
+    offset_hard = [[original_line[0][0] + vector0[0], original_line[0][1] + vector0[1]]]
+    for i in range(1, len(original_line) - 1):
+        vector1 = get_unit_vector(original_line[i], original_line[i - 1])
+        vector2 = get_unit_vector(original_line[i], original_line[i + 1])
+        angle0 = calculate_angle(original_line[i - 1], original_line[i]) + rotate
+        vector0 = [math.cos(math.radians(angle0)) * radius, math.sin(math.radians(angle0)) * radius]
+        point0 = [original_line[i][0] + vector0[0], original_line[i][1] + vector0[1]]
+        if vector1[0] == -vector2[0] and vector1[1] == -vector2[1]:
+            offset_hard.append(point0)
+        else:
+            bisector_vector = [is_positive(rotate) * (vector1[0] + vector2[0]),
+                               is_positive(rotate) * (vector1[1] + vector2[1])]
+            bisector_angle = calculate_angle([0, 0], bisector_vector)
+            bisector = [math.sin(math.radians(bisector_angle)), -math.cos(math.radians(bisector_angle)),
+                        -math.sin(math.radians(bisector_angle)) * original_line[i][0] +
+                        math.cos(math.radians(bisector_angle)) * original_line[i][1]]
+            line1 = get_line_function_with_2points(original_line[i], original_line[i - 1])
+            para_line1 = [line1[0], line1[1], -line1[0] * point0[0] - line1[1] * point0[1]]
+            offset_hard.append(get_2line_intersection(para_line1, bisector))
+    angle0 = calculate_angle(original_line[-2], original_line[-1]) + rotate
+    vector0 = [math.cos(math.radians(angle0)) * radius, math.sin(math.radians(angle0)) * radius]
+    offset_hard.append([original_line[-1][0] + vector0[0], original_line[-1][1] + vector0[1]])
+    return offset_hard
+
+
 def round_connect(lines: list, smooth_length=10):
     def get_shape(three_points: list):
         point1, point2, point3 = three_points
@@ -228,14 +313,11 @@ def round_connect(lines: list, smooth_length=10):
             res = "flat"
         return res
 
-    from matplotlib import pyplot
-
     connecting_points_id = []
-    x, y, new_line = [lines[0][0][0]], [lines[0][0][1]], [lines[0][0]]
-
+    x, y = [lines[0][0][0]], [lines[0][0][1]]
+    new_line = [lines[0][0]]
     for curve in lines:
-
-        pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
+        # pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
         local_x = [i[0] for i in curve]
         local_y = [i[1] for i in curve]
         connecting_points_id.append(len(x) - 1)
@@ -270,11 +352,15 @@ def round_connect(lines: list, smooth_length=10):
         round_boundary.append(right_bds)
 
     print(round_boundary)
-    pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
-    pyplot.show()
+
+    # pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
+    # n = numpy.arange(len(new_line))
+    # for i, txt in enumerate(n):
+    #     pyplot.annotate(txt, (new_line[i][0], new_line[i][1]))
+    # pyplot.show()
 
     round_boundary = [i[0] for i in round_boundary]
-
+    round_list = []
     # 倒圆角
     for key in connecting_points_id[1:-1]:
         # 第一步：直接往拐点key的两边扩smooth_length，得到两个边界点
@@ -291,8 +377,8 @@ def round_connect(lines: list, smooth_length=10):
         line1 = get_line_function_with_2points(new_line[left], new_line[left + 1])
         line2 = get_line_function_with_2points(new_line[right], new_line[right - 1])
 
-        if abs(line1[0] - line2[0]) < 0.001 and abs(line1[1] - line2[1]) < 0.001:
-            if abs(line1[2] - line2[2]) < 0.001:
+        if abs(line1[0] - line2[0]) < 0.0001 and abs(line1[1] - line2[1]) < 0.0001:
+            if abs(line1[2] - line2[2]) < 0.0001:
                 # 第三步：比较两个边界点的斜率，如果斜率相等，截距相差很小，则直接当作重合，取过两个边界点的直线抹匀
                 print("overlap")
                 for i in range(left + 1, right):
@@ -303,30 +389,53 @@ def round_connect(lines: list, smooth_length=10):
                 continue
             else:
                 print("paralla")
-                bisector_line = [(line1[i]+line2[i])/2 for i in range(3)] # TODO:平行
+                bisector_line = [(line1[i] + line2[i]) / 2 for i in range(3)]  # TODO:平行
+                # if abs(abs(calculate_angle(new_line[left], new_line[left + 1]) -
+                #        calculate_angle(new_line[right], new_line[right - 1])) -180) >0.1:
+
+                line1_perpen = get_perpendicular_line_function(line1, new_line[left])
+                line2_perpen = get_perpendicular_line_function(line2, new_line[right])
+                center1 = get_2line_intersection(bisector_line, line1_perpen)
+                radius1 = calculate_dis(center1, new_line[left])
+                center2 = get_2line_intersection(bisector_line, line2_perpen)
+                radius2 = calculate_dis(center2, new_line[right])
+                theta_vector1 = calculate_angle(center1, new_line[left])
+                theta_vector2 = calculate_angle(center2, new_line[right])
+
+                theta_circle = list(numpy.linspace(theta_vector1, theta_vector2, (right - left) * 5))
+                center_x = list(numpy.linspace(center1[0], center2[0], (right - left) * 5))
+                center_y = list(numpy.linspace(center1[1], center2[1], (right - left) * 5))
+                radius = list(numpy.linspace(radius1, radius2, (right - left) * 5))
+                circle = [
+                    [center_x[i] + radius[i] * math.cos(math.radians(theta_circle[i])),
+                     center_y[i] + radius[i] * math.sin(math.radians(theta_circle[i]))]
+                    for i in range(len(center_x))]
+                round_corner = circle
+                new_line[left + 1: right] = round_corner[1:-1]
+
         else:
-            x0, y0 = get_2line_intersection(line1,line2)
+            x0, y0 = get_2line_intersection(line1, line2)
             # 第四步：如果两条切线的交点不在边界内，如果在边界的左侧，则右边界左移，反之则左边界右移
-            while x0 <= min(x[left:right+1]) and right > key:
+            while x0 <= min(x[left:right + 1]) and right > key + 1:
                 print("交点在范围左，x0,y0:", x0, y0)
                 right += -1
                 line2 = get_line_function_with_2points(new_line[right], new_line[right - 1])
                 x0, y0 = get_2line_intersection(line1, line2)
                 print(f"右边界左移至{right}")
-            while x0 >= max(x[left:right+1]) and left < key:
+            while x0 >= max(x[left:right + 1]) and left < key - 1:
                 print("交点在范围右，x0,y0:", x0, y0)
                 left += 1
                 line1_x0 = x[left]
                 line1 = get_line_function_with_2points(new_line[left], new_line[left + 1])
                 x0, y0 = get_2line_intersection(line1, line2)
-                print(f"右边界左移至{right}")
-            print(left,right)
+                print(f"左边界右移至{left}")
+            print(left, right)
             theta_line1 = calculate_angle(new_line[left], new_line[left + 1])
             theta_line2 = calculate_angle(new_line[right], new_line[right - 1])
             theta_mid = (theta_line1 + theta_line2) / 2
             bisector_line = [math.sin(math.radians(theta_mid)), -math.cos(math.radians(theta_mid)),
-                             -math.sin(math.radians(theta_mid))*x0 + math.cos(math.radians(theta_mid))*y0]
-            if calculate_dis([x0,y0],new_line[left]) < calculate_dis([x0,y0],new_line[right]):
+                             -math.sin(math.radians(theta_mid)) * x0 + math.cos(math.radians(theta_mid)) * y0]
+            if calculate_dis([x0, y0], new_line[left]) < calculate_dis([x0, y0], new_line[right]):
                 line1_perpen = get_perpendicular_line_function(line1, new_line[left])
                 center = get_2line_intersection(bisector_line, line1_perpen)
                 radius = calculate_dis(center, new_line[left])
@@ -334,15 +443,17 @@ def round_connect(lines: list, smooth_length=10):
                 boundary_point = get_2line_intersection(line2_perpen_center, line2)
                 theta_vector1 = calculate_angle(center, new_line[left])
                 theta_vector2 = calculate_angle(center, boundary_point)
-                if abs(theta_vector2-theta_vector1) >180:
+                if abs(theta_vector2 - theta_vector1) > 180:
                     print(theta_vector1, theta_vector2)
-                    if theta_vector1 >theta_vector2:
+                    if theta_vector1 > theta_vector2:
                         theta_vector2 += 360
                     else:
                         theta_vector1 += 360
                     print(theta_vector1, theta_vector2)
-                theta_circle = list(numpy.linspace(theta_vector1, theta_vector2, (right-left)*5))
-                circle = [[center[0]+radius*math.cos(math.radians(i)), center[1]+radius*math.sin(math.radians(i))] for i in theta_circle]
+                theta_circle = list(numpy.linspace(theta_vector1, theta_vector2, (right - left) * 5))
+                circle = [
+                    [center[0] + radius * math.cos(math.radians(i)), center[1] + radius * math.sin(math.radians(i))] for
+                    i in theta_circle]
                 round_corner = circle + [new_line[right]]
 
             else:
@@ -353,17 +464,19 @@ def round_connect(lines: list, smooth_length=10):
                 boundary_point = get_2line_intersection(line1_perpen_center, line1)
                 theta_vector1 = calculate_angle(center, boundary_point)
                 theta_vector2 = calculate_angle(center, new_line[right])
-                if abs(theta_vector2-theta_vector1) >180:
+                if abs(theta_vector2 - theta_vector1) > 180:
                     print(theta_vector1, theta_vector2)
                     if theta_vector1 > theta_vector2:
                         theta_vector2 += 360
                     else:
                         theta_vector1 += 360
                     print(theta_vector1, theta_vector2)
-                theta_circle = list(numpy.linspace(theta_vector1, theta_vector2, (right-left)*5))
-                circle = [[center[0]+radius*math.cos(math.radians(i)), center[1]+radius*math.sin(math.radians(i))] for i in theta_circle]
+                theta_circle = list(numpy.linspace(theta_vector1, theta_vector2, (right - left) * 5))
+                circle = [
+                    [center[0] + radius * math.cos(math.radians(i)), center[1] + radius * math.sin(math.radians(i))] for
+                    i in theta_circle]
                 round_corner = [new_line[left]] + circle
             round_corner = interpolate_by_stepNum(round_corner, right - left - 1)
-            new_line[left+1: right] = round_corner[1:-1]
-
+            new_line[left + 1: right] = round_corner[1:-1]
+            round_list.append([left, right, round_corner])
     return new_line

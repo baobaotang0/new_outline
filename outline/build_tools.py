@@ -46,7 +46,10 @@ def get_vector(point1, point2):
 
 
 def get_unit_vector(point1, point2):
-    return [get_vector(point1, point2)[0] / calculate_dis(point1, point2),
+    if calculate_dis(point1, point2) == 0:
+        return [0,0]
+    else:
+        return [get_vector(point1, point2)[0] / calculate_dis(point1, point2),
             get_vector(point1, point2)[1] / calculate_dis(point1, point2)]
 
 
@@ -350,9 +353,7 @@ def offset(original_line: list, radius: float, left: bool):
 
     checklist = {}
     min_point_dis = min([calculate_dis(original_line[i],original_line[i-1]) for i in range(len(original_line))])
-    print(min_point_dis)
     searching_len = math.ceil(radius*2/min_point_dis)
-    print(searching_len)
 
     for i in range(len(offset_hard) - 1):
         this_line = get_line_function_with_2points(offset_hard[i], original_line[i])
@@ -385,15 +386,15 @@ def offset(original_line: list, radius: float, left: bool):
             y = list(numpy.linspace(offset_hard[start][1], offset_hard[end][1], end-start+1))
             offset_hard[start:end+1] = [[x[i],y[i]] for i in range(len(x))]
 
-    new_plot(original_line)
-    n = numpy.arange(len(offset_hard))
-    for i, txt in enumerate(n):
-        pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
-
-    for i in range(len(original_line)):
-        new_plot([original_line[i], offset_hard[i]])
-
-    pyplot.show()
+    # new_plot(original_line)
+    # n = numpy.arange(len(offset_hard))
+    # for i, txt in enumerate(n):
+    #     pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
+    #
+    # for i in range(len(original_line)):
+    #     new_plot([original_line[i], offset_hard[i]])
+    #
+    # pyplot.show()
     return offset_hard
 
 
@@ -414,7 +415,7 @@ def round_connect(lines: list, smooth_length=10):
     x, y = [lines[0][0][0]], [lines[0][0][1]]
     new_line = [lines[0][0]]
     for curve in lines:
-        pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
+        # pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
         local_x = [i[0] for i in curve]
         local_y = [i[1] for i in curve]
         connecting_points_id.append(len(x) - 1)
@@ -450,11 +451,11 @@ def round_connect(lines: list, smooth_length=10):
 
     print(round_boundary)
 
-    pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
-    n = numpy.arange(len(new_line))
-    for i, txt in enumerate(n):
-        pyplot.annotate(txt, (new_line[i][0], new_line[i][1]))
-    pyplot.show()
+    # pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
+    # n = numpy.arange(len(new_line))
+    # for i, txt in enumerate(n):
+    #     pyplot.annotate(txt, (new_line[i][0], new_line[i][1]))
+    # pyplot.show()
 
     round_boundary = [i[0] for i in round_boundary]
     round_list = []

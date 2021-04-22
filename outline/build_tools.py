@@ -4,7 +4,7 @@ import numpy
 from matplotlib import pyplot
 
 
-def new_plot(l, style=None):
+def new_plot(l:list, style=None):
     if style:
         pyplot.plot([p[0] for p in l], [p[1] for p in l], style)
     else:
@@ -37,6 +37,9 @@ def is_clockwise(xyz_list: list):
         clockwise = False
     return clockwise
 
+
+def is_in_circle(center:list,radius:float, point:list):
+    return is_positive(radius-calculate_dis(center,point))
 
 def get_vector(point1, point2):
     return [point2[0] - point1[0], point2[1] - point1[1]]
@@ -127,7 +130,7 @@ def interpolate_by_proportion(outline: list, scale: list):
     return res
 
 
-def interpolate_by_stepLen_plus(outline: list, dis_step: float, additional_list:list):
+def interpolate_by_stepLen_plus(outline: list, dis_step: float, additional_list: list):
     vector = []
     addition_vector = []
     dis = [0]
@@ -175,6 +178,34 @@ def find_horline_outline_intersection(outline: list, line_y: float, start_idx=No
                 compare_bigger = False
         else:
             if outline[i][1] < line_y:
+                if up:
+                    idx.append([i - 1, outline[i - 1]])
+                else:
+                    idx.append([i, outline[i]])
+                compare_bigger = True
+    return idx
+
+
+def find_verline_outline_intersection(outline: list, line_x: float, start_idx=None, end_idx=None, up=False):
+    if start_idx is None:
+        start_idx = 0
+    if end_idx is None:
+        end_idx = len(outline) - 1
+    idx = []
+    if outline[0][0] > line_x:
+        compare_bigger = False
+    else:
+        compare_bigger = True
+    for i in range(start_idx, end_idx + 1):
+        if compare_bigger:
+            if outline[i][0] > line_x:
+                if up:
+                    idx.append([i, outline[i]])
+                else:
+                    idx.append([i - 1, outline[i - 1]])
+                compare_bigger = False
+        else:
+            if outline[i][0] < line_x:
                 if up:
                     idx.append([i - 1, outline[i - 1]])
                 else:
@@ -268,7 +299,7 @@ def get_2line_intersection(line1: list, line2: list):
         print(f"直线2{line2[0]}x+{line2[1]}y+{line2[2]}=0不存在")
         res = []
     elif line1[0] / math.sqrt(line1[0] ** 2 + line1[1] ** 2) == line2[0] / math.sqrt(line2[0] ** 2 + line2[1] ** 2):
-        print("两直线平行")
+        # print("两直线平行")
         res = []
     else:
         res = [-(line1[1] * line2[2] - line2[1] * line1[2]) / (line1[1] * line2[0] - line2[1] * line1[0]),
@@ -303,7 +334,7 @@ def offset(original_line: list, radius: float, left: bool):
         point0 = [original_line[i][0] + vector0[0], original_line[i][1] + vector0[1]]
         bisector_vector = [is_positive(rotate) * (vector1[0] + vector2[0]),
                            is_positive(rotate) * (vector1[1] + vector2[1])]
-        if calculate_dis([0,0],bisector_vector) < 0.0001:
+        if calculate_dis([0, 0], bisector_vector) < 0.0001:
             offset_hard.append(point0)
         else:
             bisector_angle = calculate_angle([0, 0], bisector_vector)
@@ -317,29 +348,50 @@ def offset(original_line: list, radius: float, left: bool):
     vector0 = [math.cos(math.radians(angle0)) * radius, math.sin(math.radians(angle0)) * radius]
     offset_hard.append([original_line[-1][0] + vector0[0], original_line[-1][1] + vector0[1]])
 
+    checklist = {}
+    min_point_dis = min([calculate_dis(original_line[i],original_line[i-1]) for i in range(len(original_line))])
+    print(min_point_dis)
+    searching_len = math.ceil(radius*2/min_point_dis)
+    print(searching_len)
 
-
-    for i in range(len(offset_hard)-1):
-        this_line = get_line_function_with_2points(offset_hard[i],original_line[i])
-        len = 1
-        next_line = get_line_function_with_2points(offset_hard[i+len],original_line[i+len])
-        intersection_point = get_2line_intersection(this_line,next_line)
-        checklist = []
-        while intersection_point and  offset_hard[i][0]<intersection_point[0]< original_line[i][0]:
-            checklist.append(i+len)
-            next_line = get_line_function_with_2points(offset_hard[i + len], original_line[i + len])
+    for i in range(len(offset_hard) - 1):
+        this_line = get_line_function_with_2points(offset_hard[i], original_line[i])
+        for j in range(i+1, min(i+searching_len+1,len(offset_hard))):
+            next_line = get_line_function_with_2points(offset_hard[j], original_line[j])
             intersection_point = get_2line_intersection(this_line, next_line)
-
-
+            if intersection_point and (offset_hard[i][0]-intersection_point[0])* \
+                (original_line[i][0]-intersection_point[0]) <= 0 and \
+                    (offset_hard[j][0] - intersection_point[0]) * \
+                    (original_line[j][0] - intersection_point[0]) <= 0:
+                checklist[i] = j
+    rebuild_list = []
+    last_list = []
+    for start, end in checklist.items():
+        if not last_list:
+            last_list = [start,end]
+        else:
+            if start <= last_list[1]:
+                if end > last_list[1]:
+                    last_list[1] = end
+            else:
+                rebuild_list.append(last_list)
+                last_list = [start,end]
+    if last_list:
+        rebuild_list.append(last_list)
+        for i in rebuild_list:
+            start = max(i[0]-1, 0)
+            end = min(i[1]+1, len(offset_hard)-1)
+            x = list(numpy.linspace(offset_hard[start][0], offset_hard[end][0], end-start+1))
+            y = list(numpy.linspace(offset_hard[start][1], offset_hard[end][1], end-start+1))
+            offset_hard[start:end+1] = [[x[i],y[i]] for i in range(len(x))]
 
     new_plot(original_line)
-    n = numpy.arange(len(original_line))
+    n = numpy.arange(len(offset_hard))
     for i, txt in enumerate(n):
-        pyplot.annotate(txt, (original_line[i][0], original_line[i][1]))
+        pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
 
     for i in range(len(original_line)):
-        new_plot([original_line[i],offset_hard[i]])
-
+        new_plot([original_line[i], offset_hard[i]])
 
     pyplot.show()
     return offset_hard
@@ -362,7 +414,7 @@ def round_connect(lines: list, smooth_length=10):
     x, y = [lines[0][0][0]], [lines[0][0][1]]
     new_line = [lines[0][0]]
     for curve in lines:
-        # pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
+        pyplot.plot([p[0] for p in curve], [p[1] for p in curve], "-o")
         local_x = [i[0] for i in curve]
         local_y = [i[1] for i in curve]
         connecting_points_id.append(len(x) - 1)
@@ -398,11 +450,11 @@ def round_connect(lines: list, smooth_length=10):
 
     print(round_boundary)
 
-    # pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
-    # n = numpy.arange(len(new_line))
-    # for i, txt in enumerate(n):
-    #     pyplot.annotate(txt, (new_line[i][0], new_line[i][1]))
-    # pyplot.show()
+    pyplot.plot([new_line[i[0]][0] for i in round_boundary], [new_line[i[0]][1] for i in round_boundary], "*")
+    n = numpy.arange(len(new_line))
+    for i, txt in enumerate(n):
+        pyplot.annotate(txt, (new_line[i][0], new_line[i][1]))
+    pyplot.show()
 
     round_boundary = [i[0] for i in round_boundary]
     round_list = []
@@ -467,26 +519,30 @@ def round_connect(lines: list, smooth_length=10):
                         print("交点在范围左，x0,y0:", x0, y0)
                         right += -1
                         line2 = get_line_function_with_2points(new_line[right], new_line[right - 1])
-                        x0, y0 = get_2line_intersection(line1, line2)
+                        if get_2line_intersection(line1, line2):
+                            x0, y0 = get_2line_intersection(line1, line2)
                         print(f"右边界左移至{right}")
                     else:
                         print("交点在范围右，x0,y0:", x0, y0)
                         left += 1
                         line1 = get_line_function_with_2points(new_line[left], new_line[left + 1])
-                        x0, y0 = get_2line_intersection(line1, line2)
+                        if get_2line_intersection(line1, line2):
+                            x0, y0 = get_2line_intersection(line1, line2)
                         print(f"左边界右移至{left}")
                 elif x0 >= max(x[left:right + 1]):
                     if left + 1 < key:
                         print("交点在范围右，x0,y0:", x0, y0)
                         left += 1
                         line1 = get_line_function_with_2points(new_line[left], new_line[left + 1])
-                        x0, y0 = get_2line_intersection(line1, line2)
+                        if get_2line_intersection(line1, line2):
+                            x0, y0 = get_2line_intersection(line1, line2)
                         print(f"左边界右移至{left}")
                     else:
                         print("交点在范围左，x0,y0:", x0, y0)
                         right += -1
                         line2 = get_line_function_with_2points(new_line[right], new_line[right - 1])
-                        x0, y0 = get_2line_intersection(line1, line2)
+                        if get_2line_intersection(line1, line2):
+                            x0, y0 = get_2line_intersection(line1, line2)
                         print(f"右边界左移至{right}")
             print(left, right)
             theta_line1 = calculate_angle(new_line[left], new_line[left + 1])

@@ -123,7 +123,7 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
     folder_path = "2dcars/"
     car_id = os.listdir(folder_path)
     for i in car_id:
-        if i == "2dcar_18.npy":
+        if i not in  ["2dcar_01.npy"]:
             continue
         if i.endswith("npy"):
             print(i)

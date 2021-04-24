@@ -4,7 +4,7 @@ from shapely.geometry import MultiPoint, LineString
 from build_outline import load_outline
 from build_tools import find_horline_circle_intersection, interpolate, \
     build_circle, calculate_dis, find_horline_outline_intersection, find_2verline_outline_intersection,\
-    calculate_angle
+    calculate_angle_2points
 from vtktool.vtktool import vtk_show, point_actor, line_actor
 from scipy.spatial.distance import pdist
 
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                     origin_straight[1].append(find_horline_circle_intersection(center=outline[i], radius=l1_length,
                                                                                line_y=motor_range[2][0])[1])
 
-                    r4_origin_straight[1].append(calculate_angle([origin_straight[1][-1], motor_range[2][0]],
+                    r4_origin_straight[1].append(calculate_angle_2points([origin_straight[1][-1], motor_range[2][0]],
                                                                  outline[i]))
 
 
@@ -137,8 +137,8 @@ if __name__ == '__main__':
             total_curvity = sum(curvity)
             avg_curvity  =total_curvity/len(curvity)
 
-            start_angle = calculate_angle(idx_origin_cur_offset[-1][1], idx_cur[0][1], smaller_than_0=False)
-            end_angle = calculate_angle(idx_origin_cur_offset[0][1], idx_cur[-1][1], smaller_than_0=False)
+            start_angle = calculate_angle_2points(idx_origin_cur_offset[-1][1], idx_cur[0][1], smaller_than_0=False)
+            end_angle = calculate_angle_2points(idx_origin_cur_offset[0][1], idx_cur[-1][1], smaller_than_0=False)
             total_angle = end_angle-start_angle
             print(start_angle,end_angle)
             r4_cur = [start_angle]

@@ -252,8 +252,10 @@ if __name__ == '__main__':
         pyplot.plot([p[1][0] for p in idx_down_car], [p[1][1] for p in idx_down_car], "bo")
         pyplot.plot(motor_range[1], [motor_range[2][0], motor_range[2][0]])
         pyplot.plot(motor_range[1], [motor_range[2][1], motor_range[2][1]])
+        pyplot.axis('equal')
         pyplot.xlim(0, 7)
         pyplot.ylim(0, 3)
+
         pyplot.show()
             #
             #

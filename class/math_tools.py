@@ -401,7 +401,7 @@ def get_inscribed_circle(left_2point: list, right_2point: list):
     return radius, center, near_flag
 
 
-def build_circle(center: list, radius: float, lineNum=12):
+def build_cicle(center: list, radius: float, lineNum=12):
     theta = numpy.linspace(0, math.pi * 2, lineNum)
     res = []
     for i in theta:

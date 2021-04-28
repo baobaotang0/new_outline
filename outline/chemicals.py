@@ -2,12 +2,12 @@ import math
 
 import numpy
 from matplotlib import pyplot
-
+from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
 from build_outline import load_outline
 from build_tools import interpolate_by_stepLen, unify_list, offset, \
     calculate_angle_2points, cut_outline_with_horline, rebuild_outline, make_ends, round_connect, new_plot, \
     interpolate_by_stepLen_plus, is_in_circle, find_horline_outline_intersection, get_unit_vector, \
-    is_positive
+    is_positive, calculate_dis
 
 motor_range = {2: [1, 1.78], 4: [-125, 125], 1: [0.75, 6.35]}
 line_speed = 0.3
@@ -36,23 +36,25 @@ def get_straightline_outline(origin_bds: list, r4_bds: list):
 
 def exam_boundary(boundary: list, offset_outline: list, origin_line: list, left: bool):
     cnt = len(origin_line)
-    def generate_range(front:bool, turnning_point:int,length):
+
+    def generate_range(front: bool, turnning_point: int, length):
         if front:
-            return [0,turnning_point]
+            return [0, turnning_point]
         else:
-            return [turnning_point,length]
+            return [turnning_point, length]
+
     if left:
         idx = 0
         research_para = [1, len(offset_outline), 1]
         compare_sign = 1
-        range1 = lambda x:generate_range(front=True,turnning_point=x, length=cnt)
-        range2 = lambda x:generate_range(front=False,turnning_point=x, length=cnt)
+        range1 = lambda x: generate_range(front=True, turnning_point=x, length=cnt)
+        range2 = lambda x: generate_range(front=False, turnning_point=x, length=cnt)
     else:
         idx = -1
         research_para = [len(offset_outline) - 2, -1, -1]
         compare_sign = -1
-        range1 = lambda x:generate_range(front=False,turnning_point=x, length=cnt)
-        range2 = lambda x:generate_range(front=True,turnning_point=x, length=cnt)
+        range1 = lambda x: generate_range(front=False, turnning_point=x, length=cnt)
+        range2 = lambda x: generate_range(front=True, turnning_point=x, length=cnt)
     if abs(boundary[idx][0][0] - origin_line[idx][0]) < 2 * l1_length:
         turnning_point = None
         last_circle_flag = is_in_circle(boundary[idx][0], l1_length, offset_outline[idx])
@@ -65,12 +67,12 @@ def exam_boundary(boundary: list, offset_outline: list, origin_line: list, left:
             last_circle_flag = current_circle_flag
         if turnning_point:
             bds_angle = calculate_angle_2points(origin_line[turnning_point], offset_outline[turnning_point])
-            if is_positive(bds_angle - boundary[idx][1]) in [compare_sign,0]:
+            if is_positive(bds_angle - boundary[idx][1]) in [compare_sign, 0]:
                 vector = get_unit_vector(origin_line[turnning_point], offset_outline[turnning_point])
                 vector = [vector[0] * l1_length, vector[1] * l1_length]
                 offset_outline[idx] = [origin_line[idx][0] + vector[0], origin_line[idx][1] + vector[1]]
                 outline_point = find_horline_outline_intersection(outline=outline, line_y=offset_outline[idx][1])
-                if is_positive(offset_outline[idx][0]-outline_point[idx][0]) in [compare_sign, 0]:
+                if is_positive(offset_outline[idx][0] - outline_point[idx][0]) in [compare_sign, 0]:
                     offset_outline[range1(turnning_point)[0]:range1(turnning_point)[1]] = \
                         [[i[0] + vector[0], i[1] + vector[1]] for i in
                          origin_line[range1(turnning_point)[0]:range1(turnning_point)[1]]]
@@ -160,7 +162,7 @@ def line_filter(time_step, source, limit_acc):
 
 
 def compute_one(cmt_t, cmd1, vmax, acc):
-    from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
+
     pos = [cmd1[0]]
     v = [0]
     offset = [0]
@@ -174,15 +176,25 @@ def compute_one(cmt_t, cmd1, vmax, acc):
     return pos
 
 
+def real_vt(t: list, time_list: list, spd_list: list, moment: list):
+    j = 0
+    res = []
+    for i in range(len(moment)):
+        while moment[i] > t[j + 1]:
+            j += 1
+        res.append(get_math_spd_by_ts(moment[i] - [t[j]], time_list[j], spd_list[j])[0])
+    return res
+
 if __name__ == '__main__':
     outline_step_min = time_step_min * motor_velmax[1] + math.tan(
         math.radians(time_step_min * motor_velmax[4])) * l1_length
     loose_step_len = {}
     for num, vel in motor_velmax.items():
-        loose_step_len[num] = time_step_min * vel * 5
+        loose_step_len[num] = time_step_min * vel * 1
 
     for outline, car in load_outline(type="short", dis=shoot_range_xy, highest=motor_range[2][1] + l1_length):
         # outline = interpolate_by_stepLen(outline, 0.01)
+
         car = rebuild_outline(line=car, line_y=motor_range[2][0])
 
         # 寻找最低能射到的地方
@@ -214,41 +226,53 @@ if __name__ == '__main__':
             displaced_car = make_ends(displaced_car, motor_range[2][0])
             displaced_car = interpolate_by_stepLen(displaced_car, loose_step_len[1])
             hard_offset_car = offset(displaced_car, l1_length, True)
-            boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary,offset_outline=hard_offset_car,
-                                                                     origin_line=displaced_car,left=True)
+            boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary, offset_outline=hard_offset_car,
+                                                                     origin_line=displaced_car, left=True)
             boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary, offset_outline=hard_offset_car,
                                                                      origin_line=displaced_car, left=False)
             outline_left, origin_left = get_straightline_outline(origin_bds=[boundary[0][0], displaced_car[0]],
                                                                  r4_bds=[boundary[0][1],
                                                                          calculate_angle_2points(displaced_car[0],
-                                                                                         hard_offset_car[0],
-                                                                                         False)])
+                                                                                                 hard_offset_car[0],
+                                                                                                 False)])
             outline_right, origin_right = get_straightline_outline(origin_bds=[displaced_car[-1], boundary[-1][0]],
                                                                    r4_bds=[calculate_angle_2points(displaced_car[-1],
-                                                                                           hard_offset_car[-1]),
+                                                                                                   hard_offset_car[-1]),
                                                                            boundary[-1][1]])
             chemical_outline = round_connect([outline_left, hard_offset_car, outline_right])
             chemical_origin = round_connect([origin_left, displaced_car, origin_right])
             r4 = [calculate_angle_2points(chemical_origin[i], chemical_outline[i]) for i in range(len(chemical_origin))]
         else:
             chemical_outline, chemical_origin = get_straightline_outline(origin_bds=[boundary[0][0], boundary[1][0]],
-                                                                           r4_bds=[boundary[0][1], boundary[1][1]])
+                                                                         r4_bds=[boundary[0][1], boundary[1][1]])
         new_chemical_outline, new_chemical_origin = interpolate_by_stepLen_plus(chemical_outline,
                                                                                 outline_step_min, chemical_origin)
         new_r4 = [calculate_angle_2points(new_chemical_origin[i], new_chemical_outline[i]) for i in
                   range(len(new_chemical_origin))]
 
+
+        cutting_points = [1, len(chemical_origin)]
+        for i in range(len(chemical_outline)):
+            if calculate_dis(chemical_outline[i], chemical_outline[0]) > dis_l1l1:
+                cutting_points[0] = i
+                break
+        for i in range(len(chemical_outline) - 1, -1, -1):
+            if calculate_dis(chemical_outline[i], chemical_outline[-1]) > dis_l1l1:
+                cutting_points[1] = i
+                break
+        extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
         # pyplot.figure(figsize=(7, 3))
-        new_plot(new_chemical_outline,"-*")
+        new_plot(chemical_origin, "-*")
+        new_plot(new_chemical_outline, "-*")
         new_plot(new_chemical_origin, "-*")
         new_plot(outline, "r--")
         new_plot(car)
         # for i in range(len(new_r4)):
         #     pyplot.plot([new_chemical_origin[i][0] + math.cos(math.radians(new_r4[i])) * l1_length, new_chemical_origin[i][0]],
         #                 [new_chemical_origin[i][1] + math.sin(math.radians(new_r4[i])) * l1_length, new_chemical_origin[i][1]], "c")
-        # n = numpy.arange(len(chemicial_origin))
+        # n = numpy.arange(len(new_chemical_outline))
         # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (chemicial_origin[i][0], chemicial_origin[i][1]))
+        #     pyplot.annotate(txt, (new_chemical_outline[i][0], new_chemical_outline[i][1]))
         pyplot.plot([p[1][0] for p in idx_down_car], [p[1][1] for p in idx_down_car], "bo")
         pyplot.plot(motor_range[1], [motor_range[2][0], motor_range[2][0]])
         pyplot.plot(motor_range[1], [motor_range[2][1], motor_range[2][1]])
@@ -257,73 +281,73 @@ if __name__ == '__main__':
         pyplot.ylim(0, 3)
 
         pyplot.show()
-            #
-            #
-            # acc_list = [.5, .3, 60]
-            # vel_list = [.3, .2, 20]
-            # ts = []
-            # cnt = [0, 0, 0]
-            # for i in range(1, len(new_chemical_origin)):
-            #     ts.append(max([abs(new_chemical_origin[i][0] - new_chemical_origin[i - 1][0]) / vel_list[0],
-            #                    abs(new_chemical_origin[i][1] - new_chemical_origin[i - 1][1]) / vel_list[1],
-            #                    abs(new_r4[i] - new_r4[i - 1]) / vel_list[2],
-            #                    time_step_min]))
-            #     # if ts[-1] ==(chemical_origin[i][0]-chemical_origin[i-1][0])/vel_list[0]:
-            #     #     cnt[0] += 1
-            #     # elif  (chemical_origin[i][1] - chemical_origin[i-1][1]) / vel_list[1]:
-            #     #     cnt[1] += 1
-            #     # elif (r4[i] - r4[i-1]) / vel_list[2]
-            #
-            # pyplot.plot(ts)
-            # pyplot.show()
-            #
-            # x = [p[0] for p in new_chemical_origin]
-            # y = [p[1] for p in new_chemical_origin]
-            # new_t1, new_x = line_filter(ts, x, acc_list[0])
-            # new_t2, new_y = line_filter(ts, y, acc_list[1])
-            # new_t3, new_r = line_filter(ts, new_r4, acc_list[2])
-            # new_t = [max(a, b, c, time_step_min) for a, b, c in zip(new_t1, new_t2, new_t3)]
-            #
-            # new_t_sum = [0]
-            # new_t_cached = 0
-            # for t in new_t:
-            #     new_t_cached += t
-            #     new_t_sum.append(new_t_cached)
-            # print("t", sum(new_t), sum(ts))
-            #
-            # pyplot.figure(figsize=(20, 10))
-            # real_x = compute_one(new_t, new_x, vel_list[0], acc_list[0])
-            # real_y = compute_one(new_t, new_y, vel_list[1], acc_list[1])
-            # real_r = compute_one(new_t, new_r, vel_list[2], acc_list[2])
-            # original_x = compute_one(ts, x, vel_list[0], acc_list[0])
-            # original_y = compute_one(ts, y, vel_list[1], acc_list[1])
-            # original_r = compute_one(ts, new_r4, vel_list[2], acc_list[2])
-            # pyplot.subplot(3, 1, 1)
-            # pyplot.plot(x, "b")
-            # pyplot.plot(original_x, "r")
-            # pyplot.plot(real_x, "y")
-            # pyplot.subplot(3, 1, 2)
-            # pyplot.plot(y, "bo")
-            # pyplot.plot(original_y, "r*")
-            # pyplot.plot(real_y, "y*")
-            # pyplot.subplot(3, 1, 3)
-            # pyplot.plot(new_r4, "bo")
-            # pyplot.plot(original_r, "r*")
-            # pyplot.plot(real_r, "y*")
-            # pyplot.show()
-            #
-            # # new_plot([[new_x[i]+l1_length*math.cos(math.radians(new_r[i])),
-            # #         new_y[i]+l1_length*math.sin(math.radians(new_r[i]))] for i in range(len(new_y))],"*-g")
-            # new_plot([[original_x[i] + l1_length * math.cos(math.radians(original_r[i])),
-            #            original_y[i] + l1_length * math.sin(math.radians(original_r[i]))] for i in range(len(original_y))],
-            #          "*-r")
-            # new_plot([[real_x[i] + l1_length * math.cos(math.radians(real_r[i])),
-            #            real_y[i] + l1_length * math.sin(math.radians(real_r[i]))] for i in range(len(real_y))], "*-y")
-            # # new_plot([[x[i] + l1_length * math.cos(math.radians(new_r4[i])),
-            # #            y[i] + l1_length * math.sin(math.radians(new_r4[i]))] for i in range(len(y))], "*-b")
-            # new_plot(outline)
-            # new_plot(car)
-            # new_plot(new_chemical_origin)
-            # new_plot(chemical_outline)
-            #
-            # pyplot.show()
+        #
+
+        acc_list = [.5, .3, 60]
+        vel_list = [.3, .2, 20]
+        ts = []
+        cnt = [0, 0, 0]
+        for i in range(1, len(new_chemical_origin)):
+            ts.append(max([abs(new_chemical_origin[i][0] - new_chemical_origin[i - 1][0]) / vel_list[0],
+                           abs(new_chemical_origin[i][1] - new_chemical_origin[i - 1][1]) / vel_list[1],
+                           abs(new_r4[i] - new_r4[i - 1]) / vel_list[2],
+                           time_step_min]))
+            # if ts[-1] ==(chemical_origin[i][0]-chemical_origin[i-1][0])/vel_list[0]:
+            #     cnt[0] += 1
+            # elif  (chemical_origin[i][1] - chemical_origin[i-1][1]) / vel_list[1]:
+            #     cnt[1] += 1
+            # elif (r4[i] - r4[i-1]) / vel_list[2]
+
+        pyplot.plot(ts)
+        pyplot.show()
+
+        x = [p[0] for p in new_chemical_origin]
+        y = [p[1] for p in new_chemical_origin]
+        new_t1, new_x = line_filter(ts, x, acc_list[0])
+        new_t2, new_y = line_filter(ts, y, acc_list[1])
+        new_t3, new_r = line_filter(ts, new_r4, acc_list[2])
+        new_t = [max(a, b, c, time_step_min) for a, b, c in zip(new_t1, new_t2, new_t3)]
+
+        new_t_sum = [0]
+        new_t_cached = 0
+        for t in new_t:
+            new_t_cached += t
+            new_t_sum.append(new_t_cached)
+        print("t", sum(new_t), sum(ts))
+
+        pyplot.figure(figsize=(20, 10))
+        real_x = compute_one(new_t, new_x, vel_list[0], acc_list[0])
+        real_y = compute_one(new_t, new_y, vel_list[1], acc_list[1])
+        real_r = compute_one(new_t, new_r, vel_list[2], acc_list[2])
+        original_x = compute_one(ts, x, vel_list[0], acc_list[0])
+        original_y = compute_one(ts, y, vel_list[1], acc_list[1])
+        original_r = compute_one(ts, new_r4, vel_list[2], acc_list[2])
+        pyplot.subplot(3, 1, 1)
+        pyplot.plot(x, "b")
+        pyplot.plot(original_x, "r")
+        pyplot.plot(real_x, "y")
+        pyplot.subplot(3, 1, 2)
+        pyplot.plot(y, "bo")
+        pyplot.plot(original_y, "r*")
+        pyplot.plot(real_y, "y*")
+        pyplot.subplot(3, 1, 3)
+        pyplot.plot(new_r4, "bo")
+        pyplot.plot(original_r, "r*")
+        pyplot.plot(real_r, "y*")
+        pyplot.show()
+
+        # new_plot([[new_x[i]+l1_length*math.cos(math.radians(new_r[i])),
+        #         new_y[i]+l1_length*math.sin(math.radians(new_r[i]))] for i in range(len(new_y))],"*-g")
+        new_plot([[original_x[i] + l1_length * math.cos(math.radians(original_r[i])),
+                   original_y[i] + l1_length * math.sin(math.radians(original_r[i]))] for i in range(len(original_y))],
+                 "*-r")
+        new_plot([[real_x[i] + l1_length * math.cos(math.radians(real_r[i])),
+                   real_y[i] + l1_length * math.sin(math.radians(real_r[i]))] for i in range(len(real_y))], "*-y")
+        # new_plot([[x[i] + l1_length * math.cos(math.radians(new_r4[i])),
+        #            y[i] + l1_length * math.sin(math.radians(new_r4[i]))] for i in range(len(y))], "*-b")
+        new_plot(outline)
+        new_plot(car)
+        new_plot(new_chemical_origin)
+        new_plot(chemical_outline)
+
+        pyplot.show()

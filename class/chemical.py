@@ -1,4 +1,3 @@
-import copy
 import math
 
 import numpy
@@ -9,7 +8,7 @@ import build_functions
 from base import Builder
 from math_tools import interpolate_by_stepLen, unify_list, offset, is_positive, calculate_dis, calculate_angle_2points, \
     cut_outline_with_horline, rebuild_outline, make_ends, round_connect, interpolate_by_stepLen_plus, is_in_circle, \
-    find_horline_outline_intersection, get_unit_vector,new_plot
+    find_horline_outline_intersection, get_unit_vector
 
 
 class ChemicalBuilder(Builder):
@@ -45,7 +44,6 @@ class ChemicalBuilder(Builder):
         self._find_lowest_range()
         self._displace_downward()
         self._get_front_behind_xyzr4()
-
 
     def _check_car_height(self, rough_para=0.8):
         highest = self.raw_attr.motor_range[2][1] + self.raw_attr.l1_length
@@ -244,26 +242,78 @@ class ChemicalBuilder(Builder):
                 cutting_points[1] = i
                 break
         extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
-        s = [[self.chemical_origin[i][0]-self.chemical_origin[i-1][0],
-              self.chemical_origin[i][1]-self.chemical_origin[i-1][1],
+        s = [[self.chemical_origin[i][0] - self.chemical_origin[i - 1][0],
+              self.chemical_origin[i][1] - self.chemical_origin[i - 1][1],
               0,
-              self.r4[i] - self.r4[i-1]] for i in range(1,len(self.chemical_origin))]
-        turning_points = []
-        for i in range(1,len(s)):
-            for num in range(4):
-                if is_positive(s[i-1][num]) *is_positive(s[i][num]) <=0 and is_positive(s[i-1][num]) !=0:
-                    turning_points.append([i,num, s[i-1][num],s[i][num]])
+              self.r4[i] - self.r4[i - 1]] for i in range(1, len(self.chemical_origin))]
+        turning_points = [[], [], [], []]
+        for i in range(len(s) - 1):
+            for num in [0, 1, 3]:
+                if is_positive(s[i + 1][num]) * is_positive(s[i][num]) <= 0 and abs(s[i][num]) > 1e-5:
+                    turning_points[num].append(i)
         print(turning_points)
 
-        v_f, v_b = [[0],[0],[0]], [[0],[0],[0]]
-        pos_f = [[self.chemical_origin[extention_len][0]], [self.chemical_origin[extention_len][1]],[self.r4[extention_len]]]
-        pos_b = [[self.chemical_origin[0][0]], [self.chemical_origin[0][1]],[self.r4[0]]]
+        v_limit = [[None, None,None, None] for i in range(len(s))]
+        for num in range(4):
+            for i in turning_points[num]:
+                vt_2 = 0
+                direction = is_positive(s[i][num])
+                for j in range(i, -1, -1):
+                    v0_2 = 2 * abs(s[i][num]) * self.raw_attr.motor_acc[num + 1] + vt_2
+                    v0 = direction * math.sqrt(v0_2)
+                    if abs(v0) > self.raw_attr.motor_vel[num + 1]:
+                        break
+                    v_limit[j][num] = v0
+                    vt_2 = v0_2
+                    if j - 1 in turning_points[num]:
+                        break
+
+        v_limit.pop(0)  # 求出每一段s的最大末速度，最后一段不需要
+        pyplot.plot([i[1]for i in v_limit])
+        pyplot.show()
+        v_f, v_b = [[0], [0], [0]], [[0], [0], [0]]
+        pos_f = [[self.chemical_origin[extention_len][0]], [self.chemical_origin[extention_len][1]],
+                 [self.r4[extention_len]]]
+        pos_b = [[self.chemical_origin[0][0]], [self.chemical_origin[0][1]], [self.r4[0]]]
+
+        delta_s = [self.raw_attr.command_interval ** 2 * self.raw_attr.motor_acc[i] / 2 for i in range(4)]
+        v = [[0, 0, 0, 0]]
+        j = 0
+        interpolated_outline = [[], [], [], []]
+        while j < len(s):
+            local_dis_try = [0, 0, 0, 0]
+            for num in range(4):
+                direction = is_positive(s[j][num])
+                a = direction * self.raw_attr.motor_acc[num]
+                v_max = v[-1][num] + self.raw_attr.command_interval * a
+                if v_limit[j][num] and abs(v_max) > abs(v_limit[j][num]):
+                    t1 = (v_limit[j][num] - v[-1][num] + a * self.raw_attr.command_interval)/2/a
+                    v_top = v[-1][num] + a * self.raw_attr.command_interval
+                    if v_top > direction * self.raw_attr.motor_vel[num]:
 
 
-        pyplot.plot([i[0] for i in s])
-        pyplot.plot([i[1] for i in s])
+                    else:
+                        local_dis_try[num] = (2*v_top**2 - v[-1][num]**2 -v_limit[j][num] **2) /2/a
+                elif abs(v_max) > self.raw_attr.motor_vel[num]:
+                    pass
+
+
+                else:
+                    local_dis_try[num] = v[-1][num] * self.raw_attr.command_interval + direction * delta_s[num]
+
+
+
+
+        pyplot.subplot(3, 1, 1)
+        pyplot.plot([i[0] for i in self.chemical_origin])
+        pyplot.plot([i[0] for i in turning_points[0]], [self.chemical_origin[i[0]][0] for i in turning_points[0]], "*")
+        pyplot.subplot(3, 1, 2)
+        pyplot.plot([i[1] for i in self.chemical_origin])
+        pyplot.plot([i[0] for i in turning_points[1]], [self.chemical_origin[i[0]][1] for i in turning_points[1]], "*")
+        pyplot.subplot(3, 1, 3)
+        pyplot.plot([i for i in self.r4])
+        pyplot.plot([i[0] for i in turning_points[3]], [self.r4[i[0]] for i in turning_points[3]], "*")
         # pyplot.plot([i[3] for i in s])
-
 
         #     new_t1, new_x = build_functions.line_filter(time_use[1:], o[0], acc_limit[0])
         #     new_t2, new_y = build_functions.line_filter(time_use[1:], o[1], acc_limit[1])
@@ -349,8 +399,9 @@ class ChemicalBuilder(Builder):
         pyplot.show()
 
 
-
 from bisect import bisect_left, bisect_right
+
+
 def compute_one(cmt_t, cmd1, vmax, acc):
     pos = [cmd1[0]]
     v = [0]
@@ -363,6 +414,7 @@ def compute_one(cmt_t, cmd1, vmax, acc):
         offset.append(pos[i] - cmd1[i])
         v.append(get_math_spd_by_ts(cmt_t[i - 1], time_list, spd_list)[0])
     return pos
+
 
 def build_math_path(spd_in, spd_tar, pos_in, pos_end, acc, dec):
     pos = pos_end - pos_in
@@ -390,7 +442,7 @@ def build_math_path(spd_in, spd_tar, pos_in, pos_end, acc, dec):
     elif abs(spd_tar) >= abs(spd_in) and (pos >= pos_t >= pos_b or pos <= pos_t <= pos_b):
         run_type = '===acc==='
         t_D = (pos - pos_t) / spd_tar
-        time_list = [0, t1, t1+t_D, t1+t_D+t3]
+        time_list = [0, t1, t1 + t_D, t1 + t_D + t3]
         spd_list = [spd_in, spd_tar, spd_tar, 0]
     elif abs(spd_tar) > abs(spd_in) and (pos_t >= pos >= pos_m or pos_t <= pos <= pos_m):
         run_type = '>>>acc<<<'
@@ -407,7 +459,7 @@ def build_math_path(spd_in, spd_tar, pos_in, pos_end, acc, dec):
     elif pos <= pos_b < pos_m or pos >= pos_b > pos_m:
         run_type = '===reverse==='
         t_D = (pos_b - pos) / spd_tar
-        time_list = [0, t0, t0+t2, t0+t2+t_D, t0+t2+t_D+t3]
+        time_list = [0, t0, t0 + t2, t0 + t2 + t_D, t0 + t2 + t_D + t3]
         spd_list = [spd_in, 0, -spd_tar, -spd_tar, 0]
     elif pos_b >= pos >= pos_m or pos_b <= pos <= pos_m:
         run_type = '>>>reverse<<<'

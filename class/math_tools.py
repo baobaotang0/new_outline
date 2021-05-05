@@ -86,8 +86,6 @@ def interpolate_by_stepLen(outline: list, dis_step: float):
     res = []
     for i in range(count + 1):
         dis_cur = dis_step * i
-        if i >= count:
-            pass
         while dis_cur - dis[j + 1] > 1e-6:
             j += 1
         percent = (dis_cur - dis[j]) / (dis[j + 1] - dis[j])

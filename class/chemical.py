@@ -218,8 +218,10 @@ class ChemicalBuilder(Builder):
         self.r4 = [calculate_angle_2points(self.chemical_origin[i], self.chemical_outline[i]) for i in
                    range(len(self.chemical_origin))]
 
-        # new_plot(self.chemical_outline, "-*")
-        # new_plot(self.chemical_origin, "-*")
+        # new_plot(self.chemical_outline, "-bo")
+        # new_plot(self.chemical_origin, "-bo")
+        # new_plot(chemical_outline, "-r*")
+        # new_plot(chemical_origin, "-*r")
         # new_plot(self.outline, "r--")
         # new_plot(self.car)
         # from matplotlib import pyplot
@@ -242,18 +244,22 @@ class ChemicalBuilder(Builder):
                 cutting_points[1] = i
                 break
         extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
+
+        points = [[self.chemical_origin[i][0], self.chemical_origin[i][0], 0, self.r4[i]] for i in
+                  range(len(self.chemical_origin))]
         s = [[self.chemical_origin[i][0] - self.chemical_origin[i - 1][0],
               self.chemical_origin[i][1] - self.chemical_origin[i - 1][1],
               0,
               self.r4[i] - self.r4[i - 1]] for i in range(1, len(self.chemical_origin))]
-        turning_points = [[], [], [], []]
+
+        turning_points = [[],[],[],[]]
         for i in range(len(s) - 1):
             for num in [0, 1, 3]:
                 if is_positive(s[i + 1][num]) * is_positive(s[i][num]) <= 0 and abs(s[i][num]) > 1e-5:
-                    turning_points[num].append(i)
+                    turning_points[num].append(i + 1)
         print(turning_points)
 
-        v_limit = [[None, None,None, None] for i in range(len(s))]
+        v_limit = [[None, None, None, None] for i in range(len(s))]
         for num in range(4):
             for i in turning_points[num]:
                 vt_2 = 0
@@ -269,50 +275,72 @@ class ChemicalBuilder(Builder):
                         break
 
         v_limit.pop(0)  # 求出每一段s的最大末速度，最后一段不需要
-        pyplot.plot([i[1]for i in v_limit])
-        pyplot.show()
+        # pyplot.plot([i[1] for i in v_limit])
+        # pyplot.show()
         v_f, v_b = [[0], [0], [0]], [[0], [0], [0]]
-        pos_f = [[self.chemical_origin[extention_len][0]], [self.chemical_origin[extention_len][1]],
-                 [self.r4[extention_len]]]
-        pos_b = [[self.chemical_origin[0][0]], [self.chemical_origin[0][1]], [self.r4[0]]]
+        pos_f = [[self.chemical_origin[extention_len][0], self.chemical_origin[extention_len][1],0,self.r4[extention_len]]]
+        pos_b = [[self.chemical_origin[0][0], self.chemical_origin[0][1], 0, self.r4[0]]]
 
-        delta_s = [self.raw_attr.command_interval ** 2 * self.raw_attr.motor_acc[i] / 2 for i in range(4)]
+        delta_s = [self.raw_attr.command_interval ** 2 * self.raw_attr.motor_acc[i] / 2 for i in range(1,5)]
         v = [[0, 0, 0, 0]]
         j = 0
+        k = [0, 0, 0, 0]
         interpolated_outline = [[], [], [], []]
         while j < len(s):
-            local_dis_try = [0, 0, 0, 0]
-            for num in range(4):
+            local_s_try = [0, 0, 0, 0]
+            j_try = [j, j, j, j]
+            for num in [0,1,3]:
                 direction = is_positive(s[j][num])
-                a = direction * self.raw_attr.motor_acc[num]
-                v_max = v[-1][num] + self.raw_attr.command_interval * a
-                if v_limit[j][num] and abs(v_max) > abs(v_limit[j][num]):
-                    t1 = (v_limit[j][num] - v[-1][num] + a * self.raw_attr.command_interval)/2/a
-                    v_top = v[-1][num] + a * self.raw_attr.command_interval
-                    if v_top > direction * self.raw_attr.motor_vel[num]:
-
-
+                if direction == 0:
+                    if v[-1][num] == 0:
+                        j_try[num] += 1
+                        continue
                     else:
-                        local_dis_try[num] = (2*v_top**2 - v[-1][num]**2 -v_limit[j][num] **2) /2/a
-                elif abs(v_max) > self.raw_attr.motor_vel[num]:
-                    pass
-
-
+                        a = is_positive(v[-1][num]) * self.raw_attr.motor_acc[num+1]
                 else:
-                    local_dis_try[num] = v[-1][num] * self.raw_attr.command_interval + direction * delta_s[num]
+                    a = direction * self.raw_attr.motor_acc[num+1]
+                    v_max = direction * self.raw_attr.motor_vel[num+1]
+                if turning_points[num] and abs(pos_f[-1][num] + v[-1][num] ** 2 / 2 / a) > abs(
+                        points[turning_points[num][k[num]]][num]):
+                    local_s_try[num] = v[-1][
+                                           num] * self.raw_attr.command_interval - a * self.raw_attr.command_interval ** 2 / 2
+                elif abs(v[-1][num] + a * self.raw_attr.command_interval) > self.raw_attr.motor_vel[num+1]:
+                    t1 = (v_max - v[-1][num]) / a
+                    local_s_try[num] = v[-1][num] * t1 + a / 2 * t1 ** 2 + (
+                            self.raw_attr.command_interval - t1) * v_max
+                else:
+                    local_s_try[num] = v[-1][num] * self.raw_attr.command_interval + direction * delta_s[num]
+            print(local_s_try[num])
+                # while pos_f[-1][num] + local_s_try[num] - points[j_try[num] + 1][num] > 1e-6:
+                #     j_try[num] += 1
+                # j_try[num] = (pos_f[-1][num] + local_s_try[num] - points[j_try[num]][num]) / \
+                #              (points[j_try[num] + 1][num] - points[j_try[num]][num])
 
+            # if v_limit[j][num] and abs(v_acc_max) > abs(v_limit[j][num]):
+            #     t1 = (v_limit[j][num] - v[-1][num] + self.raw_attr.command_interval * a) / 2 / a
+            #     v_top = v[-1][num] + a * t1
+            #     if v_top > v_max:
+            #         t1 = (v_max - v[-1][num]) / a
+            #         local_s_try[num] = v[-1][num] * t1 + a / 2 * t1 ** 2 + (
+            #                     self.raw_attr.command_interval - t1) * v_max
+            #     else:
+            #         local_s_try[num] = (2 * v_top ** 2 - v[-1][num] ** 2 - v_limit[j][num] ** 2) / 2 / a
+            # elif abs(v_acc_max) > self.raw_attr.motor_vel[num]:
+            #     t1 = (v_max - v[-1][num]) / a
+            #     local_s_try[num] = v[-1][num] * t1 + a / 2 * t1 ** 2 + (
+            #             self.raw_attr.command_interval - t1) * v_max
+            # else:
+            #     local_s_try[num] = v[-1][num] * self.raw_attr.command_interval + direction * delta_s[num]
 
-
-
-        pyplot.subplot(3, 1, 1)
-        pyplot.plot([i[0] for i in self.chemical_origin])
-        pyplot.plot([i[0] for i in turning_points[0]], [self.chemical_origin[i[0]][0] for i in turning_points[0]], "*")
-        pyplot.subplot(3, 1, 2)
-        pyplot.plot([i[1] for i in self.chemical_origin])
-        pyplot.plot([i[0] for i in turning_points[1]], [self.chemical_origin[i[0]][1] for i in turning_points[1]], "*")
-        pyplot.subplot(3, 1, 3)
-        pyplot.plot([i for i in self.r4])
-        pyplot.plot([i[0] for i in turning_points[3]], [self.r4[i[0]] for i in turning_points[3]], "*")
+        # pyplot.subplot(3, 1, 1)
+        # pyplot.plot([i[0] for i in self.chemical_origin])
+        # pyplot.plot([i[0] for i in turning_points[0]], [self.chemical_origin[i[0]][0] for i in turning_points[0]], "*")
+        # pyplot.subplot(3, 1, 2)
+        # pyplot.plot([i[1] for i in self.chemical_origin])
+        # pyplot.plot([i[0] for i in turning_points[1]], [self.chemical_origin[i[0]][1] for i in turning_points[1]], "*")
+        # pyplot.subplot(3, 1, 3)
+        # pyplot.plot([i for i in self.r4])
+        # pyplot.plot([i[0] for i in turning_points[3]], [self.r4[i[0]] for i in turning_points[3]], "*")
         # pyplot.plot([i[3] for i in s])
 
         #     new_t1, new_x = build_functions.line_filter(time_use[1:], o[0], acc_limit[0])

@@ -18,13 +18,21 @@ def takeFirst(elem):
     return elem[0]
 
 
-def is_positive(num: float):
-    if num > 0:
-        return 1
-    elif num == 0:
-        return 0
+def is_positive(num: float,is_strict=True,loose_range=1e-8):
+    if is_strict:
+        if num > 0:
+            return 1
+        elif num == 0:
+            return 0
+        else:
+            return -1
     else:
-        return -1
+        if num > loose_range:
+            return 1
+        elif num < -loose_range:
+            return -1
+        else:
+            return 0
 
 
 def is_clockwise(xyz_list: list):

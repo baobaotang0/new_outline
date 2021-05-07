@@ -1,12 +1,11 @@
 import math
 
 import numpy
-from matplotlib import pyplot
 from shapely.geometry import MultiPoint
 
 import build_functions
 from base import Builder
-from math_tools import interpolate_by_stepLen, unify_list, offset, is_positive, calculate_dis, calculate_angle_2points, \
+from math_tools import interpolate_by_stepLen, unify_list, offset, is_positive, calculate_angle_2points, \
     cut_outline_with_horline, rebuild_outline, make_ends, round_connect, interpolate_by_stepLen_plus, is_in_circle, \
     find_horline_outline_intersection, get_unit_vector, new_plot
 
@@ -41,9 +40,8 @@ class ChemicalBuilder(Builder):
 
     def Build(self):
         self._check_car_height()
-        self._find_lowest_range()
-        self._displace_downward()
-        self._get_front_behind_xyzr4()
+        if not self._find_lowest_range():
+            self._displace_downward()
 
     def _check_car_height(self, rough_para=0.8):
         highest = self.raw_attr.motor_range[2][1] + self.raw_attr.l1_length
@@ -77,11 +75,13 @@ class ChemicalBuilder(Builder):
                 self.raw_attr.l1_length or down_car[-1][0] - self.raw_attr.shoot_range_xy < \
                 self.x_range[0] - self.raw_attr.l1_length:
             # 检车是否过界
-            raise ValueError("车越界")
+            print("车越界")
+            return 1
         self.idx_down_car = [[0, down_car[0], 180], [0, down_car[0], 0]]
         for i in range(len(down_car)):
             cur_r4 = calculate_angle_2points(point1=down_car[i],
                                              point2=[self.x_range[1], self.raw_attr.motor_range[2][0]])
+
             if cur_r4 > self.idx_down_car[1][2]:
                 self.idx_down_car[1] = [i, down_car[i], cur_r4]
             cur_r4 = calculate_angle_2points(point1=down_car[i],
@@ -90,6 +90,16 @@ class ChemicalBuilder(Builder):
                 self.idx_down_car[0] = [i, down_car[i], cur_r4]
         self.boundary = [[[self.x_range[0], self.raw_attr.motor_range[2][0]], self.idx_down_car[0][2]],
                          [[self.x_range[1], self.raw_attr.motor_range[2][0]], self.idx_down_car[1][2]]]
+        if self.boundary[0][1] < 90:
+            self.boundary[0][1] = 180
+        if self.boundary[1][1] > 90:
+            self.boundary[1][1] = 90
+        print(self.boundary)
+        new_plot(
+            [self.boundary[0][0][0] + self.raw_attr.l1_length * math.cos(math.radians(self.boundary[0][1])),
+             self.boundary[0][0][1] + self.raw_attr.l1_length * math.sin(math.radians(self.boundary[0][1]))],
+            "r*")
+
 
     def _displace_downward(self):
         def _get_straightline_outline(origin_bds: list, r4_bds: list):
@@ -180,7 +190,9 @@ class ChemicalBuilder(Builder):
                         break
             self.displaced_car = make_ends(self.displaced_car, self.raw_attr.motor_range[2][0])
             self.displaced_car = interpolate_by_stepLen(self.displaced_car, self.loose_step_len[1])
-            self.hard_offset_car = offset(original_line=self.displaced_car, radius=self.raw_attr.l1_length, left=True)
+            self.hard_offset_car = offset(original_line=self.displaced_car, radius=self.raw_attr.l1_length, left=True,
+                                          is_hard=False)
+
             if cut_flag[0]:
                 self.outline_left, self.origin_left = [], []
             else:
@@ -188,10 +200,13 @@ class ChemicalBuilder(Builder):
                                                                                          offset_outline=self.hard_offset_car,
                                                                                          origin_line=self.displaced_car,
                                                                                          left=True)
-                self.outline_left, self.origin_left = _get_straightline_outline(
-                    origin_bds=[self.boundary[0][0], self.displaced_car[0]],
-                    r4_bds=[self.boundary[0][1],
-                            calculate_angle_2points(self.displaced_car[0], self.hard_offset_car[0], False)])
+                if self.boundary[0][0][0] > self.car[0][0]:
+
+                else:
+                    self.outline_left, self.origin_left = _get_straightline_outline(
+                        origin_bds=[self.boundary[0][0], self.displaced_car[0]],
+                        r4_bds=[self.boundary[0][1],
+                                calculate_angle_2points(self.displaced_car[0], self.hard_offset_car[0], False)])
 
             if cut_flag[1]:
                 self.outline_right, self.origin_right = [], []
@@ -218,319 +233,23 @@ class ChemicalBuilder(Builder):
         self.r4 = [calculate_angle_2points(self.chemical_origin[i], self.chemical_outline[i]) for i in
                    range(len(self.chemical_origin))]
 
-        # new_plot(self.chemical_outline, "-bo")
-        # new_plot(self.chemical_origin, "-bo")
+        new_plot(self.chemical_outline, "-bo")
+        new_plot(self.chemical_origin, "-bo")
         # new_plot(chemical_outline, "-r*")
         # new_plot(chemical_origin, "-*r")
-        # new_plot(self.outline, "r--")
-        # new_plot(self.car)
-        # from matplotlib import pyplot
-        # pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "bo")
-        # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][0], self.raw_attr.motor_range[2][0]])
-        # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][1], self.raw_attr.motor_range[2][1]])
-        # pyplot.axis('equal')
-        # pyplot.xlim(0, 7)
-        # pyplot.ylim(0, 3)
-        # pyplot.show()
 
-    def _get_front_behind_xyzr4(self):
-        # 计算前后杆相差点的个数
-        cutting_points = [1, len(self.chemical_origin)]
-        for i in range(len(self.chemical_outline)):
-            if calculate_dis(self.chemical_outline[i], self.chemical_outline[0]) > self.raw_attr.dis_l1l1:
-                cutting_points[0] = i
-                break
-        for i in range(len(self.chemical_outline) - 1, -1, -1):
-            if calculate_dis(self.chemical_outline[i], self.chemical_outline[-1]) > self.raw_attr.dis_l1l1:
-                cutting_points[1] = i
-                break
-        extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
-        # 将位移肢解
-        position = [[self.chemical_origin[i][0], self.chemical_origin[i][1], 0, self.r4[i]] for i in
-                    range(len(self.chemical_origin))]
-        s = [[position[i][num] - position[i - 1][num] for num in range(4)] for i in range(1, len(self.chemical_origin))]
-        increase = [[abs(j) for j in i] for i in s]
-        distance = [[0, 0, 0, 0]]
-        for i in range(len(s)):
-            distance.append([distance[i][num] + increase[i][num] for num in range(4)])
-
-        # 将s按照方向分段
-        loose_range = [self.raw_attr.motor_vel[i] / 1e5 for i in range(1, 5)]
-        turning_points = [[[0, is_positive(s[0][num], is_strict=False, loose_range=loose_range[num])]] for num in
-                          range(4)]
-        for num in range(4):
-            for i in range(len(s) - 1):
-                if is_positive(s[i + 1][num], is_strict=False, loose_range=loose_range[num]) != \
-                        is_positive(s[i][num], is_strict=False, loose_range=loose_range[num]):
-                    turning_points[num].append([i + 1,
-                                                is_positive(s[i + 1][num], is_strict=False,
-                                                            loose_range=loose_range[num])])
-            turning_points[num].append([len(s) - 1, None])
-        # print(turning_points)
-        # new_plot([[i[0], s[i[0]][3]] for i in turning_points[3]], "o")
-        # pyplot.plot([i[3] for i in s], "*-")
-        # pyplot.show()
-
-        v_f, v_b = [[0], [0], [0]], [[0], [0], [0]]
-        pos_f = [
-            [self.chemical_origin[extention_len][0], self.chemical_origin[extention_len][1], 0, self.r4[extention_len]]]
-        pos_b = [[self.chemical_origin[0][0], self.chemical_origin[0][1], 0, self.r4[0]]]
-
-        delta_s = [self.raw_attr.command_interval ** 2 * self.raw_attr.motor_acc[i] / 2 for i in range(1, 5)]
-        real_pos = [[self.chemical_origin[0][0]], [self.chemical_origin[0][1]], [0], [self.r4[0]]]
-        real_dis = [[0], [0], [0], [0]]
-        real_v = [[0], [0], [0], [0]]
-        s_idx = [0,0]
-        dir_idx = [0, 0, 0, 0]
-        a = [0, 0, 0, 0]
-        dec_flag = [False, False, False, False]
-        v_max = [0, 0, 0, 0]
-        interpolated_outline = [[], [], [], []]
-
-        # 减速的函数
-        def decelerate(v0, local_a, local_s):
-            if abs(v0**2/local_a/2) > abs(local_s):
-                vt = math.sqrt(-2*local_a*local_s + v0**2)
-                t = (v0-vt)/local_a
-            else:
-                local_s = v0 ** 2 / 2 / local_a
-                vt = 0
-                t = v0/local_a
-            return t, vt, local_s
-
-        real_t = []
-        for i in range(len(s)-1):
-            if i > 50:
-                print()
-                pass
-            try_s = [0, 0, 0, 0]
-            try_v = [0, 0, 0, 0]
-            try_t = [0, 0, 0, 0]
-            unstopable_flag = [False, False, False, False]
-            for num in range(4):
-                # 判断加速度方向
-                if i == turning_points[num][dir_idx[num]][0]:
-                    dec_flag[num] = False
-                    a[num] = turning_points[num][dir_idx[num]][1] * self.raw_attr.motor_acc[num + 1]
-                    v_max[num] = turning_points[num][dir_idx[num]][1] * self.raw_attr.motor_vel[num + 1]
-                    dir_idx[num] += 1
-                # 判断
-                if a[num] == 0:
-                    # try_s_idx[num] = turning_points[num][dir_idx[num] + 1][0]
-                    if real_v[num][-1]!=0:
-                        unstopable_flag[num] = True
-                        local_a = is_positive(real_v[num][-1]) * self.raw_attr.motor_acc[num + 1]
-                        try_t[num] = real_v[num][-1]/local_a
-                        try_s[num] = real_v[num][-1] **2 /2/local_a
-                        try_v[num] = 0
-                    continue
-                if dec_flag[num] or distance[i][num] + abs(real_v[num][-1] ** 2 / 2 / a[num]) > \
-                        distance[turning_points[num][dir_idx[num]][0]][num]:
-                    dec_flag[num] = True
-                    try_t[num], try_v[num], try_s[num] = decelerate(real_v[num][-1], a[num],s[i][num])
-                else:
-                    try_v[num] = math.sqrt(2*a[num]*s[i][num] + real_v[num][-1]**2)
-                    if abs(try_v[num]) > self.raw_attr.motor_vel[num + 1]:
-                        t1 = (v_max[num] - real_v[num][-1]) / a[num]
-                        s1 = (v_max[num]**2 - real_v[num][-1]**2)/2/a[num]
-                        s2 = s[i][num]- s1
-                        t2 = s2/v_max[num]
-                        try_t[num] = t1+t2
-                        try_v[num] = v_max[num]
-                    else:
-                        try_t[num] = (try_v[num]- real_v[num][-1])/a[num]
-            ref = 0
-            real_t.append(try_t[0])
-            for j in range(1, 4):
-                if try_t[j] > real_t[-1]:
-                    ref = j
-                    real_t[-1] = try_t[j]
-            for num in range(4):
-                if dec_flag[num] or unstopable_flag[num]:
-                    real_v[num].append(try_v[num])
-                    real_pos[num].append(real_pos[num][-1] + try_s[num])
-                    real_dis[num].append(real_dis[num][-1] + abs(try_s[num]))
-                elif num == ref:
-                    real_v[num].append(try_v[num])
-                    real_pos[num].append(real_pos[num][-1] + s[i][num])
-                    real_dis[num].append(real_dis[num][-1] + abs(s[i][num]))
-                else:
-                    vt_acc_max = a[num] * real_t[-1] + real_v[num][-1]
-                    print(i,num,real_v[num][-1],s[i][num],a[num],real_t[-1])
-                    print(2 * a[num] * s[i][num] - (vt_acc_max ** 2 - real_v[num][-1] ** 2))
-                    vt = vt_acc_max - math.sqrt(-2 * (2 * a[num] * s[i][num] - (vt_acc_max ** 2 - real_v[num][-1] ** 2)))
-                    v_top = (vt_acc_max + vt) / 2
-                    if abs(v_top) > self.raw_attr.motor_vel[num + 1]:
-                        t1 = (v_max[num] - real_v[num][-1]) / a[num]
-                        s1 = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2
-                        t3 = math.sqrt(2 * (v_max[num] * (real_t[-1] - t1) - (s[i][num] - s1)) / a[num])
-                        vt = v_max[num] - a[num] * t3
-                    real_v[num].append(vt)
-                    real_pos[num].append(real_pos[num][-1] + s[i][num])
-                    real_dis[num].append(real_dis[num][-1] + abs(s[i][num]))
-        # while s_idx[-1] < 50:#len(s) - 1
-        #     try_s = [0, 0, 0, 0]
-        #     try_v = [0, 0, 0, 0]
-        #     try_s_idx = [int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1])]
-        #     unstopable_flag = [False, False, False, False]
-        #
-        #         # 判断
-        #         if a[num] == 0:
-        #             # try_s_idx[num] = turning_points[num][dir_idx[num] + 1][0]
-        #             if try_v[num] == 0:
-        #                 continue
-        #             else:
-        #                 unstopable_flag[num] = True
-        #                 try_s[num], try_v[num] = decelerate(real_v[num][-1],
-        #                                                     is_positive(try_v[num]) * self.raw_attr.motor_acc[num + 1])
-        #                 continue
-        #
-        #         if dec_flag[num] or distance[int(s_idx[-1])][num] + abs(real_v[num][-1] ** 2 / 2 / a[num]) > abs(
-        #                 distance[turning_points[num][dir_idx[num] + 1][0]][num]):
-        #             dec_flag[num] = True
-        #             try_s[num], try_v[num] = decelerate(real_v[num][-1], a[num])
-        #         else:
-        #             if abs(real_v[num][-1] + a[num] * self.raw_attr.command_interval) > self.raw_attr.motor_vel[num + 1]:
-        #                 t1 = (v_max[num] - try_v[num]) / a[num]
-        #                 try_s[num] = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2 + (
-        #                         self.raw_attr.command_interval - t1) * v_max[num]
-        #                 try_v[num] = v_max[num]
-        #             else:
-        #                 try_s[num] = real_v[num][-1] * self.raw_attr.command_interval + a[
-        #                     num] * self.raw_attr.command_interval ** 2 / 2
-        #                 try_v[num] = real_v[num][-1] + self.raw_attr.command_interval * a[num]
-        #         try_dis = real_dis[num][-1] + abs(try_s[num])
-        #         while try_dis - distance[int(s_idx[-2]) + 1][num] > 1e-6:
-        #             try_s_idx[num] += 1
-        #         percent = (try_dis - distance[try_s_idx[num]][num]) / increase[try_s_idx[num]][num]
-        #         try_s_idx[num] += percent
-        #     ref = 0
-        #     s_idx.append(try_s_idx[0])
-        #     for i in range(1, 4):
-        #         if try_s_idx[i] > s_idx[-1]:
-        #             ref = i
-        #             s_idx[-1] = try_s_idx[i]
-        #     for num in range(4):
-        #         if unstopable_flag[num]:
-        #             real_v[num].append(try_v[num])
-        #             real_pos[num].append(real_pos[num][-1] + try_s[num])
-        #             real_dis[num].append(distance[int(s_idx[-1])][num])
-        #         elif num == ref:
-        #             real_v[num].append(try_v[num])
-        #             real_pos[num].append(real_pos[num][-1] + try_s[num])
-        #             real_dis[num].append(real_dis[num][-1] + abs(try_s[num]))
-        #         else:
-        #             local_s = position[int(s_idx[-1])][num] + s[int(s_idx[-1])][num] * (s_idx[-1] - int(s_idx[-1])) - real_pos[num][-1]
-        #             vt_acc_max = a[num] * self.raw_attr.command_interval + real_v[num][-1]
-        #             vt = vt_acc_max - math.sqrt(-2 * (2 * a[num] * local_s - (vt_acc_max ** 2 - real_v[num][-1] ** 2)))
-        #             v_top = (vt_acc_max + vt) / 2
-        #             if abs(v_top) > self.raw_attr.motor_vel[num + 1]:
-        #                 t1 = (v_max[num] - real_v[num][-1]) / a[num]
-        #                 s1 = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2
-        #                 t3 = math.sqrt(
-        #                     2 * (v_max[num] * (self.raw_attr.command_interval - t1) - (local_s - s1)) / a[num])
-        #                 vt = v_max[num] - a[num] * t3
-        #             real_v[num].append(vt)
-        #             real_pos[num].append(real_pos[num][-1] + local_s)
-        #             real_dis[num].append(real_dis[num][-1] + abs(local_s))
-        #
-        #
-        #
-        # pyplot.subplot(3, 1, 1)
-        # pyplot.plot([i[0] for i in self.chemical_origin])
-        # pyplot.plot([i[0] for i in turning_points[0]], [self.chemical_origin[i[0]][0] for i in turning_points[0]], "*")
-        # pyplot.plot(real_pos[0],"--")
-        # pyplot.subplot(3, 1, 2)
-        # pyplot.plot([i[1] for i in self.chemical_origin])
-        # pyplot.plot([i[0] for i in turning_points[1]], [self.chemical_origin[i[0]][1] for i in turning_points[1]], "*")
-        # pyplot.plot(real_pos[1], "--")
-        # pyplot.subplot(3, 1, 3)
-        # pyplot.plot([i for i in self.r4])
-        # pyplot.plot([i[0] for i in turning_points[3]], [self.r4[i[0]] for i in turning_points[3]], "*")
-        # # pyplot.plot([i[3] for i in s])
-        # pyplot.plot(real_pos[3], "--")
-        # pyplot.show()
-        #     new_t1, new_x = build_functions.line_filter(time_use[1:], o[0], acc_limit[0])
-        #     new_t2, new_y = build_functions.line_filter(time_use[1:], o[1], acc_limit[1])
-        #     new_t3, new_r = build_functions.line_filter(time_use[1:], o[3], acc_limit[3])
-        #     new_t_use = [max(a, b, c) for a, b, c in zip(new_t1, new_t2, new_t3)]
-        #     new_t_use.insert(0, 0)  # 补齐少的一位,要在reverse结束后做curve[0]
-        #     new_t = []
-        #     for i in range(count):
-        #         new_t.append(sum(new_t_use[:i + 1]))
-        #     for i in range(count):
-        #         command = [new_t[i], o[0][i], o[1][i], o[2][i], o[3][i]-90, None, 0]
-        #         commands[bid].append(command)
-        # for i in range(len(commands[1])):
-        #     if commands[1][i][0] > commands[2][i][0]:
-        #         commands[2][i][0] = commands[1][i][0]
-        #     else:
-        #         commands[1][i][0] = commands[2][i][0]
-        #
-        # pyplot.figure(figsize=(20, 10))
-        # ts = [commands[1][i+1][0] - commands[1][i][0] for i in range(len(commands[1])-1)]
-        # x = [p[0] for p in self.front_xyzr4]
-        # y = [p[1] for p in self.chemical_origin]
-        # real_x_f = compute_one(ts, [i[1] for i in commands[1]], self.raw_attr.motor_vel[1], self.raw_attr.motor_acc[1])
-        # real_y_f = compute_one(ts, [i[2] for i in commands[1]], self.raw_attr.motor_vel[2], self.raw_attr.motor_acc[2])
-        # real_r_f = compute_one(ts, [i[4] for i in commands[1]], self.raw_attr.motor_vel[4], self.raw_attr.motor_acc[4])
-        # real_x_b = compute_one(ts, [i[1] for i in commands[2]], self.raw_attr.motor_vel[1], self.raw_attr.motor_acc[1])
-        # real_y_b = compute_one(ts, [i[2] for i in commands[2]], self.raw_attr.motor_vel[2], self.raw_attr.motor_acc[2])
-        # real_r_b = compute_one(ts, [i[4] for i in commands[2]], self.raw_attr.motor_vel[4], self.raw_attr.motor_acc[4])
-        # original_x_f = compute_one(ts, [i[0] for i in self.front_xyzr4], self.raw_attr.motor_vel[1],
-        #                            self.raw_attr.motor_acc[1])
-        # original_y_f = compute_one(ts, [i[1] for i in self.front_xyzr4], self.raw_attr.motor_vel[2],
-        #                            self.raw_attr.motor_acc[2])
-        # original_r_f = compute_one(ts, [i[3] for i in self.front_xyzr4], self.raw_attr.motor_vel[4],
-        #                            self.raw_attr.motor_acc[4])
-        # pyplot.subplot(3, 1, 1)
-        # pyplot.plot(x, "b")
-        # pyplot.plot(original_x_f, "r")
-        # pyplot.plot(real_x_f, "y")
-        # pyplot.plot(real_x_b, "g")
-        # pyplot.subplot(3, 1, 2)
-        # pyplot.plot(y, "bo")
-        # pyplot.plot(original_y_f, "r*")
-        # pyplot.plot(real_y_f, "y")
-        # pyplot.plot(real_y_b, "g")
-        # pyplot.subplot(3, 1, 3)
-        # pyplot.plot(self.r4, "bo")
-        # pyplot.plot(original_r_f, "r*")
-        # pyplot.plot(real_r_f, "y")
-        # pyplot.plot(real_r_b, "g")
-        # pyplot.show()
-        #
-        # # new_plot([[new_x[i]+l1_length*math.cos(math.radians(new_r[i])),
-        # #         new_y[i]+l1_length*math.sin(math.radians(new_r[i]))] for i in range(len(new_y))],"*-g")
-        #
-        # dis = [calculate_dis([real_x_b[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_b[i]+90)),
-        #                real_y_b[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_b[i]+90))],
-        #               [real_x_f[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_f[i] + 90)),
-        #                real_y_f[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_f[i] + 90))])
-        #     for i in range(len(real_r_b))]
-        # pyplot.plot(dis)
-        # dis2 = [calculate_dis([self.front_xyzr4[i][0] + self.raw_attr.l1_length *
-        #                        math.cos(math.radians(self.front_xyzr4[i][3])),
-        #                       self.front_xyzr4[i][1] + self.raw_attr.l1_length *
-        #                        math.sin(math.radians(self.front_xyzr4[i][3]))],
-        #                       [self.behind_xyzr4[i][0] + self.raw_attr.l1_length *
-        #                        math.cos(math.radians(self.behind_xyzr4[i][3])),
-        #                        self.behind_xyzr4[i][1] + self.raw_attr.l1_length *
-        #                        math.sin(math.radians(self.behind_xyzr4[i][3]))])
-        #     for i in range(len(real_r_b))]
-        # pyplot.plot(dis2,"r")
-        # # new_plot([[original_x[i] + l1_length * math.cos(math.radians(original_r[i])),
-        # #            original_y[i] + l1_length * math.sin(math.radians(original_r[i]))] for i in range(len(original_y))],
-        # #          "*-r")
-        # # new_plot([[real_x[i] + l1_length * math.cos(math.radians(real_r[i])),
-        # #            real_y[i] + l1_length * math.sin(math.radians(real_r[i]))] for i in range(len(real_y))], "*-y")
-        # # new_plot([[x[i] + l1_length * math.cos(math.radians(new_r4[i])),
-        # #            y[i] + l1_length * math.sin(math.radians(new_r4[i]))] for i in range(len(y))], "*-b")
-        # # new_plot(self.outline)
-        # # new_plot(self.car)
-        # # new_plot(self.chemical_origin)
-        # # new_plot(self.chemical_outline)
-        #
+        new_plot(self.car)
+        new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
+                   self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
+                  range(len(self.chemical_origin))], "y+")
+        from matplotlib import pyplot
+        pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "b+")
+        new_plot(self.outline, "r--")
+        pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][0], self.raw_attr.motor_range[2][0]])
+        pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][1], self.raw_attr.motor_range[2][1]])
+        pyplot.axis('equal')
+        pyplot.xlim(0, 7)
+        pyplot.ylim(0, 3)
         pyplot.show()
 
 

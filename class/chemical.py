@@ -280,7 +280,7 @@ class ChemicalBuilder(Builder):
         real_pos = [[self.chemical_origin[0][0]], [self.chemical_origin[0][1]], [0], [self.r4[0]]]
         real_dis = [[0], [0], [0], [0]]
         real_v = [[0], [0], [0], [0]]
-        s_idx = [0]
+        s_idx = [0,0]
         dir_idx = [0, 0, 0, 0]
         a = [0, 0, 0, 0]
         dec_flag = [False, False, False, False]
@@ -288,97 +288,168 @@ class ChemicalBuilder(Builder):
         interpolated_outline = [[], [], [], []]
 
         # 减速的函数
-        def decelerate(v0, local_a):
-            if abs(v0) > abs(local_a) * self.raw_attr.command_interreal_val:
-                local_s = v0 * self.raw_attr.command_interval - local_a * self.raw_attr.command_interval ** 2 / 2
-                vt = v0 - self.raw_attr.command_interval * local_a
+        def decelerate(v0, local_a, local_s):
+            if abs(v0**2/local_a/2) > abs(local_s):
+                vt = math.sqrt(-2*local_a*local_s + v0**2)
+                t = (v0-vt)/local_a
             else:
                 local_s = v0 ** 2 / 2 / local_a
                 vt = 0
-            return local_s, vt
+                t = v0/local_a
+            return t, vt, local_s
 
-        while s_idx[-1] < len(s) - 1:
+        real_t = []
+        for i in range(len(s)-1):
+            if i > 50:
+                print()
+                pass
             try_s = [0, 0, 0, 0]
             try_v = [0, 0, 0, 0]
-            try_s_idx = [int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1])]
+            try_t = [0, 0, 0, 0]
             unstopable_flag = [False, False, False, False]
             for num in range(4):
                 # 判断加速度方向
-                if int(s_idx[-1]) == turning_points[num][dir_idx[num]][0]:
+                if i == turning_points[num][dir_idx[num]][0]:
                     dec_flag[num] = False
                     a[num] = turning_points[num][dir_idx[num]][1] * self.raw_attr.motor_acc[num + 1]
                     v_max[num] = turning_points[num][dir_idx[num]][1] * self.raw_attr.motor_vel[num + 1]
+                    dir_idx[num] += 1
                 # 判断
                 if a[num] == 0:
-                    try_s_idx[num] = turning_points[num][dir_idx[num] + 1][0]
-                    if try_v[num] == 0:
-                        continue
-                    else:
+                    # try_s_idx[num] = turning_points[num][dir_idx[num] + 1][0]
+                    if real_v[num][-1]!=0:
                         unstopable_flag[num] = True
-                        try_s[num], try_v[num] = decelerate(real_v[num][-1],
-                                                            is_positive(try_v[num]) * self.raw_attr.motor_acc[num + 1])
-                        continue
-
-                if dec_flag[num] or distance[int(s_idx[-1])][num] + abs(real_v[num][-1] ** 2 / 2 / a[num]) > abs(
-                        distance[turning_points[num][dir_idx[num] + 1][0]][num]):
+                        local_a = is_positive(real_v[num][-1]) * self.raw_attr.motor_acc[num + 1]
+                        try_t[num] = real_v[num][-1]/local_a
+                        try_s[num] = real_v[num][-1] **2 /2/local_a
+                        try_v[num] = 0
+                    continue
+                if dec_flag[num] or distance[i][num] + abs(real_v[num][-1] ** 2 / 2 / a[num]) > \
+                        distance[turning_points[num][dir_idx[num]][0]][num]:
                     dec_flag[num] = True
-                    try_s[num], try_v[num] = decelerate(real_v[num][-1], a[num])
+                    try_t[num], try_v[num], try_s[num] = decelerate(real_v[num][-1], a[num],s[i][num])
                 else:
-                    if abs(real_v[num][-1] + a[num] * self.raw_attr.command_interval) > self.raw_attr.motor_vel[num + 1]:
-                        t1 = (v_max[num] - try_v[num]) / a[num]
-                        try_s[num] = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2 + (
-                                self.raw_attr.command_interval - t1) * v_max[num]
+                    try_v[num] = math.sqrt(2*a[num]*s[i][num] + real_v[num][-1]**2)
+                    if abs(try_v[num]) > self.raw_attr.motor_vel[num + 1]:
+                        t1 = (v_max[num] - real_v[num][-1]) / a[num]
+                        s1 = (v_max[num]**2 - real_v[num][-1]**2)/2/a[num]
+                        s2 = s[i][num]- s1
+                        t2 = s2/v_max[num]
+                        try_t[num] = t1+t2
                         try_v[num] = v_max[num]
                     else:
-                        try_s[num] = real_v[num][-1] * self.raw_attr.command_interval + a[
-                            num] * self.raw_attr.command_interval ** 2 / 2
-                        try_v[num] = real_v[num][-1] + self.raw_attr.command_interval * a[num]
-                try_dis = real_dis[num][-1] + abs(try_s[num])
-                while try_dis - distance[try_s_idx[num] + 1][num] > 1e-6:
-                    try_s_idx[num] += 1
-                percent = (try_dis - distance[try_s_idx[num]][num]) / increase[try_s_idx[num]][num]
-                try_s_idx[num] += percent
+                        try_t[num] = (try_v[num]- real_v[num][-1])/a[num]
             ref = 0
-            s_idx.append(try_s_idx[0])
-            for i in range(1, 4):
-                if try_s_idx[i] < s_idx[-1]:
-                    ref = i
-                    s_idx[-1] = try_s_idx[i]
+            real_t.append(try_t[0])
+            for j in range(1, 4):
+                if try_t[j] > real_t[-1]:
+                    ref = j
+                    real_t[-1] = try_t[j]
             for num in range(4):
-                if unstopable_flag[num]:
-                    real_v[num].append(try_v[num])
-                    real_pos[num].append(real_pos[num][-1] + try_s[num])
-                    real_dis[num].append(distance[int(s_idx[-1])][num])
-                elif num == ref:
+                if dec_flag[num] or unstopable_flag[num]:
                     real_v[num].append(try_v[num])
                     real_pos[num].append(real_pos[num][-1] + try_s[num])
                     real_dis[num].append(real_dis[num][-1] + abs(try_s[num]))
+                elif num == ref:
+                    real_v[num].append(try_v[num])
+                    real_pos[num].append(real_pos[num][-1] + s[i][num])
+                    real_dis[num].append(real_dis[num][-1] + abs(s[i][num]))
                 else:
-                    local_s = position[int(s_idx[-1])][num] + s[int(s_idx[-1])][num] * (s_idx[-1] - int(s_idx[-1])) - real_pos[num][-1]
-                    vt_acc_max = a[num] * self.raw_attr.command_interval + real_v[num][-1]
-                    vt = vt_acc_max - math.sqrt(-2 * (2 * a[num] * local_s - (vt_acc_max ** 2 - real_v[num][-1] ** 2)))
+                    vt_acc_max = a[num] * real_t[-1] + real_v[num][-1]
+                    print(i,num,real_v[num][-1],s[i][num],a[num],real_t[-1])
+                    print(2 * a[num] * s[i][num] - (vt_acc_max ** 2 - real_v[num][-1] ** 2))
+                    vt = vt_acc_max - math.sqrt(-2 * (2 * a[num] * s[i][num] - (vt_acc_max ** 2 - real_v[num][-1] ** 2)))
                     v_top = (vt_acc_max + vt) / 2
                     if abs(v_top) > self.raw_attr.motor_vel[num + 1]:
                         t1 = (v_max[num] - real_v[num][-1]) / a[num]
                         s1 = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2
-                        t3 = math.sqrt(
-                            2 * (v_max[num] * (self.raw_attr.command_interval - t1) - (local_s - s1)) / a[num])
+                        t3 = math.sqrt(2 * (v_max[num] * (real_t[-1] - t1) - (s[i][num] - s1)) / a[num])
                         vt = v_max[num] - a[num] * t3
                     real_v[num].append(vt)
-                    real_pos[num].append(real_pos[num][-1] + local_s)
-                    real_dis[num].append(real_dis[num][-1] + abs(local_s))
-
+                    real_pos[num].append(real_pos[num][-1] + s[i][num])
+                    real_dis[num].append(real_dis[num][-1] + abs(s[i][num]))
+        # while s_idx[-1] < 50:#len(s) - 1
+        #     try_s = [0, 0, 0, 0]
+        #     try_v = [0, 0, 0, 0]
+        #     try_s_idx = [int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1]), int(s_idx[-1])]
+        #     unstopable_flag = [False, False, False, False]
+        #
+        #         # 判断
+        #         if a[num] == 0:
+        #             # try_s_idx[num] = turning_points[num][dir_idx[num] + 1][0]
+        #             if try_v[num] == 0:
+        #                 continue
+        #             else:
+        #                 unstopable_flag[num] = True
+        #                 try_s[num], try_v[num] = decelerate(real_v[num][-1],
+        #                                                     is_positive(try_v[num]) * self.raw_attr.motor_acc[num + 1])
+        #                 continue
+        #
+        #         if dec_flag[num] or distance[int(s_idx[-1])][num] + abs(real_v[num][-1] ** 2 / 2 / a[num]) > abs(
+        #                 distance[turning_points[num][dir_idx[num] + 1][0]][num]):
+        #             dec_flag[num] = True
+        #             try_s[num], try_v[num] = decelerate(real_v[num][-1], a[num])
+        #         else:
+        #             if abs(real_v[num][-1] + a[num] * self.raw_attr.command_interval) > self.raw_attr.motor_vel[num + 1]:
+        #                 t1 = (v_max[num] - try_v[num]) / a[num]
+        #                 try_s[num] = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2 + (
+        #                         self.raw_attr.command_interval - t1) * v_max[num]
+        #                 try_v[num] = v_max[num]
+        #             else:
+        #                 try_s[num] = real_v[num][-1] * self.raw_attr.command_interval + a[
+        #                     num] * self.raw_attr.command_interval ** 2 / 2
+        #                 try_v[num] = real_v[num][-1] + self.raw_attr.command_interval * a[num]
+        #         try_dis = real_dis[num][-1] + abs(try_s[num])
+        #         while try_dis - distance[int(s_idx[-2]) + 1][num] > 1e-6:
+        #             try_s_idx[num] += 1
+        #         percent = (try_dis - distance[try_s_idx[num]][num]) / increase[try_s_idx[num]][num]
+        #         try_s_idx[num] += percent
+        #     ref = 0
+        #     s_idx.append(try_s_idx[0])
+        #     for i in range(1, 4):
+        #         if try_s_idx[i] > s_idx[-1]:
+        #             ref = i
+        #             s_idx[-1] = try_s_idx[i]
+        #     for num in range(4):
+        #         if unstopable_flag[num]:
+        #             real_v[num].append(try_v[num])
+        #             real_pos[num].append(real_pos[num][-1] + try_s[num])
+        #             real_dis[num].append(distance[int(s_idx[-1])][num])
+        #         elif num == ref:
+        #             real_v[num].append(try_v[num])
+        #             real_pos[num].append(real_pos[num][-1] + try_s[num])
+        #             real_dis[num].append(real_dis[num][-1] + abs(try_s[num]))
+        #         else:
+        #             local_s = position[int(s_idx[-1])][num] + s[int(s_idx[-1])][num] * (s_idx[-1] - int(s_idx[-1])) - real_pos[num][-1]
+        #             vt_acc_max = a[num] * self.raw_attr.command_interval + real_v[num][-1]
+        #             vt = vt_acc_max - math.sqrt(-2 * (2 * a[num] * local_s - (vt_acc_max ** 2 - real_v[num][-1] ** 2)))
+        #             v_top = (vt_acc_max + vt) / 2
+        #             if abs(v_top) > self.raw_attr.motor_vel[num + 1]:
+        #                 t1 = (v_max[num] - real_v[num][-1]) / a[num]
+        #                 s1 = real_v[num][-1] * t1 + a[num] / 2 * t1 ** 2
+        #                 t3 = math.sqrt(
+        #                     2 * (v_max[num] * (self.raw_attr.command_interval - t1) - (local_s - s1)) / a[num])
+        #                 vt = v_max[num] - a[num] * t3
+        #             real_v[num].append(vt)
+        #             real_pos[num].append(real_pos[num][-1] + local_s)
+        #             real_dis[num].append(real_dis[num][-1] + abs(local_s))
+        #
+        #
+        #
         # pyplot.subplot(3, 1, 1)
         # pyplot.plot([i[0] for i in self.chemical_origin])
         # pyplot.plot([i[0] for i in turning_points[0]], [self.chemical_origin[i[0]][0] for i in turning_points[0]], "*")
+        # pyplot.plot(real_pos[0],"--")
         # pyplot.subplot(3, 1, 2)
         # pyplot.plot([i[1] for i in self.chemical_origin])
         # pyplot.plot([i[0] for i in turning_points[1]], [self.chemical_origin[i[0]][1] for i in turning_points[1]], "*")
+        # pyplot.plot(real_pos[1], "--")
         # pyplot.subplot(3, 1, 3)
         # pyplot.plot([i for i in self.r4])
         # pyplot.plot([i[0] for i in turning_points[3]], [self.r4[i[0]] for i in turning_points[3]], "*")
-        # pyplot.plot([i[3] for i in s])
-
+        # # pyplot.plot([i[3] for i in s])
+        # pyplot.plot(real_pos[3], "--")
+        # pyplot.show()
         #     new_t1, new_x = build_functions.line_filter(time_use[1:], o[0], acc_limit[0])
         #     new_t2, new_y = build_functions.line_filter(time_use[1:], o[1], acc_limit[1])
         #     new_t3, new_r = build_functions.line_filter(time_use[1:], o[3], acc_limit[3])

@@ -65,10 +65,6 @@ def get_unit_vector(point1, point2):
                 get_vector(point1, point2)[1] / calculate_dis(point1, point2)]
 
 
-def find_horline_circle_intersection(center: list, radius: float, line_y: float):
-    return [center[0] + math.sqrt(radius ** 2 - (line_y - center[1]) ** 2),
-            center[0] - math.sqrt(radius ** 2 - (line_y - center[1]) ** 2)]
-
 def calculate_dis(point1: list, point2: list) -> float:
     return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
@@ -365,7 +361,7 @@ def offset(original_line: list, radius: float, left: bool, is_hard=True):
                 offset_hard[start:end + 1] = [[x[j], y[j]] for j in range(len(x))]
             else:
                 for j in range(len(x)):
-                    local_vector = get_unit_vector(original_line[start+j],[x[j], y[j]])
+                    local_vector = get_unit_vector(original_line[start+j], [x[j], y[j]])
                     offset_hard[start+j] = [original_line[start+j][0]+local_vector[0]*radius,
                                             original_line[start+j][1]+local_vector[1]*radius]
 

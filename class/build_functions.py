@@ -291,5 +291,5 @@ def line_filter(time_step, source, limit_acc):
         new_ts[idx] *= scale
 
     # 未来预测再放送
-    new_tar = vas_filter(new_ts, new_tar, limit_acc)
+    # new_tar = vas_filter(new_ts, new_tar, limit_acc)
     return new_ts, new_tar

@@ -9,7 +9,7 @@ import build_functions
 from base import Builder
 from math_tools import interpolate_by_stepLen, unify_list, offset, is_positive, calculate_angle_2points, \
     cut_outline_with_horline, rebuild_outline, round_connect, interpolate_by_stepLen_plus, is_in_circle, \
-    find_horline_outline_intersection, get_unit_vector, new_plot, calculate_dis
+    find_horline_outline_intersection, get_unit_vector, new_plot, calculate_dis, calculate_density
 
 
 class ChemicalBuilder(Builder):
@@ -186,11 +186,6 @@ class ChemicalBuilder(Builder):
                                                                                 offset_outline=self.offset_car,
                                                                                 origin_line=self.displaced_car,
                                                                                 left=True)
-            new_plot(self.displaced_car)
-            n = numpy.arange(len(self.displaced_car))
-            for i, txt in enumerate(n):
-                pyplot.annotate(txt, (self.displaced_car[i][0], self.displaced_car[i][1]))
-            pyplot.show()
             self.outline_left, self.origin_left = _get_straightline_outline(
                 origin_bds=[self.boundary[0][0], self.displaced_car[0]],
                 r4_bds=[self.boundary[0][1],
@@ -216,25 +211,49 @@ class ChemicalBuilder(Builder):
                                                                                   chemical_origin)
         self.r4 = [calculate_angle_2points(self.chemical_origin[i], self.chemical_outline[i]) for i in
                    range(len(self.chemical_origin))]
+        pyplot.plot(self.r4,"r")
+        turning_points =[]
+        s_r4 = [self.r4[i+1]-self.r4[i] for i in range(len(self.r4)-1)]
+        v_r4 = [s_r4[i + 1] - s_r4[i] for i in range(len(s_r4) - 1)]
+        a_r4 = [v_r4[i + 1] - v_r4[i] for i in range(len(v_r4) - 1)]
+        # pyplot.plot(s_r4,)
+        turning_points = []
+        pyplot.plot([i*10 for i in a_r4])
+        for i in range(len(a_r4)-1):
+            if is_positive(a_r4[i],False,1) !=0 and is_positive(a_r4[i+1],False,1) == -is_positive(a_r4[i],False,1):
+                turning_points.append(i+1)
+                print(i+1, a_r4[i+1], a_r4[i])
+        fluctuation_points_density = calculate_density(turning_points, 5, len(a_r4))
+        pyplot.plot([i * 10 for i in fluctuation_points_density],"r")
+        turning_points = []
+        for i in range(len(v_r4)-1):
+            if abs(v_r4[i]- v_r4[i+1])>1e-2:
+                turning_points.append(i+1)
+        fluctuation_points_density = calculate_density(turning_points, 5, len(v_r4))
+        pyplot.plot([i*10 for i in fluctuation_points_density])
+        from scipy.signal import savgol_filter
 
+        self.r4 = savgol_filter(self.r4, 31, 3)
+        pyplot.plot(self.r4[2:])
+        pyplot.show()
         # new_plot(self.chemical_outline, "-bo")
         # new_plot(self.chemical_origin, "-bo")
         # # new_plot(chemical_outline, "-r*")
         # # new_plot(chemical_origin, "-*r")
         #
-        # new_plot(self.car)
-        # new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
-        #            self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
-        #           range(len(self.chemical_origin))], "y+")
+        new_plot(self.car)
+        new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
+                   self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
+                  range(len(self.chemical_origin))], "y*")
         # from matplotlib import pyplot
         # pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "b+")
-        # new_plot(self.outline, "r--")
+        new_plot(self.outline, "r--")
         # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][0], self.raw_attr.motor_range[2][0]])
         # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][1], self.raw_attr.motor_range[2][1]])
-        # pyplot.axis('equal')
-        # pyplot.xlim(0, 7)
-        # pyplot.ylim(0, 3)
-        # pyplot.show()
+        pyplot.axis('equal')
+        pyplot.xlim(0, 7)
+        pyplot.ylim(0, 3)
+        pyplot.show()
 
     def _get_front_behind_xyzr4(self):
         cutting_points = [1, len(self.chemical_origin)]
@@ -247,6 +266,7 @@ class ChemicalBuilder(Builder):
                 cutting_points[1] = i
                 break
         extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
+
         cut_len = math.ceil(cutting_points[0] / 4)  # 留有1/4 的余量， 剪掉这一部分防撞
         if self.outline[0][0] - self.raw_attr.dis_l1l1 > self.raw_attr.motor_range[1][0]:
             self.front_xyzr4 = [[self.chemical_origin[i][0], self.chemical_origin[i][1],
@@ -291,103 +311,33 @@ class ChemicalBuilder(Builder):
             self.pump_off_idx = [len(self.front_xyzr4) - extention_len + cut_len, len(self.front_xyzr4)]
 
     def _get_time_step(self):
-        s_f = [[self.front_xyzr4[i][num] - self.front_xyzr4[i - 1][num] for num in range(4)] for i in range(1, len(self.front_xyzr4))]
-        s_b = [[self.behind_xyzr4[i][num] - self.behind_xyzr4[i - 1][num] for num in range(4)] for i in range(1, len(self.behind_xyzr4))]
-        s_o = [calculate_dis(self.chemical_origin[i], self.chemical_origin[i+1]) for i in range(len(self.chemical_origin)-1)]
-
-        print("tmax", sum(s_o)/self.raw_attr.motor_vel[1]*1.5)
-        # pyplot.plot([i[0]for i in s_f])
-        # pyplot.show()
-        smooth_len = 10
-        check_list = {}
-        loose_range = [self.raw_attr.motor_vel[i] / 1e5 for i in range(1, 5)]
-        turning_points = []
-        for s in [s_f,s_b]:
-            turning_points =[[] for num in range(4)]
-            for num in range(4):
-                for i in range(len(s) - 1):
-                    if is_positive(s[i + 1][num], is_strict=False, loose_range=loose_range[num]) != \
-                            is_positive(s[i][num], is_strict=False, loose_range=loose_range[num]):
-                        # print(i,num,s[i + 1][num],s[i][num])
-                        turning_points[num].append([i + 1,
-                                                    is_positive(s[i][num], is_strict=False, loose_range=loose_range[num]),
-                                                    is_positive(s[i + 1][num], is_strict=False,
-                                                                loose_range=loose_range[num])])
-            # print(turning_points)
-            for num in [0,1]:
-                for i in turning_points[num]:
-                    if i[1] != 0:
-                        for left in range(smooth_len):
-                            if i[0]-left not in check_list.keys() or left < check_list[i[0]-left]:
-                                check_list[i[0]-left] = left
-                    if i[2] != 0:
-                        for right in range(smooth_len):
-                            if i[0] + right+ 1 not in check_list.keys() or right < check_list[i[0] + right+ 1]:
-                                check_list[i[0] + right+ 1] = right
-        # print(check_list)
         vel_limit = [self.raw_attr.motor_vel[1], self.raw_attr.motor_vel[2],
                      self.raw_attr.motor_vel[3], self.raw_attr.motor_vel[4]]
         time_step = {1: [], 2: []}
         self.time_step = []
-        fenmu = math.sqrt(smooth_len)-math.sqrt(smooth_len-1)
         for i in range(len(self.front_xyzr4) - 1):
-
             t = [abs(self.front_xyzr4[i + 1][j] - self.front_xyzr4[i][j]) / vel_limit[j] for j in range(4)]
-            # t = []
             time_step[1].append(max(t))
 
         for i in range(len(self.behind_xyzr4) - 1):
             t = [abs(self.behind_xyzr4[i + 1][j] - self.behind_xyzr4[i][j]) / vel_limit[j] for j in range(4)]
             time_step[2].append(max(t))
             self.time_step.append(max(time_step[1][i], time_step[2][i], self.raw_attr.command_interval))
-        print(sum(self.time_step))
-        for i in range(len(self.time_step)):
-            if i in check_list.keys():
-                self.time_step[i] = (self.time_step[i] * (math.sqrt(check_list[i] + 1) - math.sqrt(check_list[i])) / fenmu)
-        # 将s按照方向分段
-        print(sum(self.time_step))
+        #
+        # real_x_ft = compute_one(self.time_step, [i[0] for i in self.front_xyzr4], self.raw_attr.motor_vel[1],
+        #                        self.raw_attr.motor_acc[1])
+        # real_y_ft = compute_one(self.time_step, [i[1] for i in self.front_xyzr4], self.raw_attr.motor_vel[2],
+        #                        self.raw_attr.motor_acc[2])
+        # real_r_ft = compute_one(self.time_step, [i[3] for i in self.front_xyzr4], self.raw_attr.motor_vel[4],
+        #                        self.raw_attr.motor_acc[4])
+        # real_o_ft =[[real_x_ft[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_ft[i])),
+        #             real_y_ft[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_ft[i]))] for i in range(len(real_y_ft))]
+        # v_ft = [calculate_dis(real_o_ft[i + 1], real_o_ft[i]) / self.time_step[i] for i in range(len(self.time_step))]
+        # tt = [sum(self.time_step[:i + 1]) for i in range(len(self.time_step))]
+        # v_x_ft = [(real_x_ft[i+1] - real_x_ft[i])/self.time_step[i] for i in range(len(self.time_step)) ]
+        # pyplot.plot( v_x_ft,"b")
 
-
-
-        real_x_f = compute_one(self.time_step, [i[0] for i in self.front_xyzr4], self.raw_attr.motor_vel[1],
-                               self.raw_attr.motor_acc[1])
-        real_y_f = compute_one(self.time_step, [i[1] for i in self.front_xyzr4], self.raw_attr.motor_vel[2],
-                               self.raw_attr.motor_acc[2])
-        real_r_f = compute_one(self.time_step, [i[3] for i in self.front_xyzr4], self.raw_attr.motor_vel[4],
-                               self.raw_attr.motor_acc[4])
-        real_x_b = compute_one(self.time_step, [i[0] for i in self.behind_xyzr4], self.raw_attr.motor_vel[1],
-                               self.raw_attr.motor_acc[1])
-        real_y_b = compute_one(self.time_step, [i[1] for i in self.behind_xyzr4], self.raw_attr.motor_vel[2],
-                               self.raw_attr.motor_acc[2])
-        real_r_b = compute_one(self.time_step, [i[3] for i in self.behind_xyzr4], self.raw_attr.motor_vel[4],
-                               self.raw_attr.motor_acc[4])
-        pyplot.figure(figsize=(20, 10))
-        new_plot([[real_x_f[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_f[i])),
-                   real_y_f[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_f[i]))] for i in
-                  range(len(real_x_f))],
-                 "s-r")
-        new_plot([[real_x_b[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_b[i])),
-                   real_y_b[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_b[i]))] for i in
-                  range(len(real_x_b))], "o-y")
-
-        new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
-                   self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
-                  range(len(self.chemical_origin))], "*-b")
-        new_plot(self.outline)
-        new_plot(self.car)
-        new_plot(self.chemical_origin)
-        new_plot(self.chemical_outline)
-        n = numpy.arange(len(self.front_xyzr4))
-        for i, txt in enumerate(n):
-            pyplot.annotate(txt, (self.front_xyzr4[i][0],self.front_xyzr4[i][1]))
-
-        # n = numpy.arange(len(self.front_xyzr4))
-
-        # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (self.front_xyzr4[i][0]+ self.raw_attr.l1_length * math.cos(math.radians(self.front_xyzr4[i][3])),
-        #          self.front_xyzr4[i][1]+ self.raw_attr.l1_length * math.sin(math.radians(self.front_xyzr4[i][3]))))
         pyplot.show()
-
     def _build_new_command(self):
         bots_id = [1, 2]
         commands = {}
@@ -406,61 +356,11 @@ class ChemicalBuilder(Builder):
                 for j in range(4):
                     o[j].append(order[i][j])
 
-            new_t1, new_x = build_functions.line_filter(time_use[1:], o[0], acc_limit[0])
-            new_t2, new_y = build_functions.line_filter(time_use[1:], o[1], acc_limit[1])
-            new_t3, new_r = build_functions.line_filter(time_use[1:], o[3], acc_limit[3])
-            new_t_use = [max(a, b, c) for a, b, c in zip(new_t1, new_t2, new_t3)]
-            new_t_use.insert(0, 0)  # 补齐少的一位,要在reverse结束后做curve[0]
-            new_t = []
             for i in range(count):
-                new_t.append(sum(new_t_use[:i + 1]))
-            for i in range(count):
-                command = [new_t[i], o[0][i], o[2][i], o[2][i], o[3][i] - 90, None, 0]
+                command = [t[i], o[0][i], o[2][i], o[2][i], o[3][i] - 90, None, 0]
                 commands[bid].append(command)
-        for i in range(len(commands[1])):
-            if commands[1][i][0] > commands[2][i][0]:
-                commands[2][i][0] = commands[1][i][0]
-            else:
-                commands[1][i][0] = commands[2][i][0]
 
-        # pyplot.subplot(3, 1, 1)
-        # pyplot.plot(x, "b")
-        # pyplot.plot(original_x_f, "r")
-        # pyplot.plot(real_x_f, "y")
-        # pyplot.plot(real_x_b, "g")
-        # pyplot.subplot(3, 1, 2)
-        # pyplot.plot(y, "bo")
-        # pyplot.plot(original_y_f, "r*")
-        # pyplot.plot(real_y_f, "y")
-        # pyplot.plot(real_y_b, "g")
-        # pyplot.subplot(3, 1, 3)
-        # pyplot.plot(self.r4, "bo")
-        # pyplot.plot(original_r_f, "r*")
-        # pyplot.plot(real_r_f, "y")
-        # pyplot.plot(real_r_b, "g")
-        # pyplot.show()
 
-        # new_plot([[new_x[i]+l1_length*math.cos(math.radians(new_r[i])),
-        #         new_y[i]+l1_length*math.sin(math.radians(new_r[i]))] for i in range(len(new_y))],"*-g")
-
-        # dis = [calculate_dis([real_x_b[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_b[i]+90)),
-        #                real_y_b[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_b[i]+90))],
-        #               [real_x_f[i] + self.raw_attr.l1_length * math.cos(math.radians(real_r_f[i] + 90)),
-        #                real_y_f[i] + self.raw_attr.l1_length * math.sin(math.radians(real_r_f[i] + 90))])
-        #     for i in range(len(real_r_b))]
-        # pyplot.plot(dis)
-        # dis2 = [calculate_dis([self.front_xyzr4[i][0] + self.raw_attr.l1_length *
-        #                        math.cos(math.radians(self.front_xyzr4[i][3])),
-        #                       self.front_xyzr4[i][1] + self.raw_attr.l1_length *
-        #                        math.sin(math.radians(self.front_xyzr4[i][3]))],
-        #                       [self.behind_xyzr4[i][0] + self.raw_attr.l1_length *
-        #                        math.cos(math.radians(self.behind_xyzr4[i][3])),
-        #                        self.behind_xyzr4[i][1] + self.raw_attr.l1_length *
-        #                        math.sin(math.radians(self.behind_xyzr4[i][3]))])
-        #     for i in range(len(real_r_b))]
-        # pyplot.plot(dis2,"r")
-
-        print(sum(self.time_step),commands[1][-1][0])
         self.bots_commands = commands
 
 

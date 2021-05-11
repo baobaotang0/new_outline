@@ -82,6 +82,18 @@ def calculate_angle_2points(point1: list, point2: list, smaller_than_0=True) -> 
     return angle
 
 
+def calculate_density(data: list, window_len_1side: int, total_len: int):
+    if total_len <= window_len_1side:
+        return f"窗口太长，单侧范围最大为{len(data) - 1}"
+    y = [1 if i in data else 0 for i in range(total_len)]
+    new_data = [0] * window_len_1side + y + [0] * window_len_1side
+    density = []
+    for i in range(window_len_1side, len(new_data) - window_len_1side):
+        density.append(sum(
+            [new_data[j] / math.sqrt(1 + (j - i) ** 2) for j in range(i - window_len_1side, i + window_len_1side)]))
+    return density
+
+
 def interpolate_by_stepLen(outline: list, dis_step: float):
     """需要提前检查重合点"""
     vector = []
@@ -365,14 +377,28 @@ def offset(original_line: list, radius: float, left: bool, is_hard=True):
                     offset_hard[start+j] = [original_line[start+j][0]+local_vector[0]*radius,
                                             original_line[start+j][1]+local_vector[1]*radius]
 
-    # new_plot(original_line)
+    # new_plot(original_line,"b")
     #
     # n = numpy.arange(len(offset_hard))
     # for i, txt in enumerate(n):
     #     pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
-    #
     # for i in range(len(original_line)):
-    #     new_plot([original_line[i], offset_hard[i]])
+        # new_plot([original_line[i], offset_hard[i]])
+    # pyplot.show()
+
+
+    # angle = []
+    # for i in range(len(original_line)):
+    #     angle.append(calculate_angle_2points(offset_hard[i], original_line[i]))
+    #
+    # from scipy.signal import savgol_filter
+    # yhat = savgol_filter(angle, 51, 3)
+    # # pyplot.plot(angle,"*-")
+    # # pyplot.plot(yhat,"*-")
+    # new_outline = [[offset_hard[i][0] + radius*math.cos(math.radians(yhat[i])),
+    #                offset_hard[i][1] + radius*math.sin(math.radians(yhat[i]))]
+    #                for i in range(len(yhat))]
+    # new_plot(new_outline,"r")
     #
     # pyplot.show()
     return offset_hard

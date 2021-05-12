@@ -172,6 +172,7 @@ class ChemicalBuilder(Builder):
         cutting_points = find_horline_outline_intersection(outline=self.displaced_car,
                                                            line_y=self.raw_attr.motor_range[2][0],
                                                            start_idx=None, end_idx=None, up=False)
+
         self.displaced_car = \
             cut_outline_with_horline(outline=self.displaced_car, line_y=self.raw_attr.motor_range[2][0])[0]
         self.displaced_car = unify_list(self.displaced_car)
@@ -211,40 +212,110 @@ class ChemicalBuilder(Builder):
                                                                                   chemical_origin)
         self.r4 = [calculate_angle_2points(self.chemical_origin[i], self.chemical_outline[i]) for i in
                    range(len(self.chemical_origin))]
-        pyplot.plot(self.r4,"r")
-        turning_points =[]
-        s_r4 = [self.r4[i+1]-self.r4[i] for i in range(len(self.r4)-1)]
-        v_r4 = [s_r4[i + 1] - s_r4[i] for i in range(len(s_r4) - 1)]
-        a_r4 = [v_r4[i + 1] - v_r4[i] for i in range(len(v_r4) - 1)]
-        # pyplot.plot(s_r4,)
-        turning_points = []
-        pyplot.plot([i*10 for i in a_r4])
-        for i in range(len(a_r4)-1):
-            if is_positive(a_r4[i],False,1) !=0 and is_positive(a_r4[i+1],False,1) == -is_positive(a_r4[i],False,1):
-                turning_points.append(i+1)
-                print(i+1, a_r4[i+1], a_r4[i])
-        fluctuation_points_density = calculate_density(turning_points, 5, len(a_r4))
-        pyplot.plot([i * 10 for i in fluctuation_points_density],"r")
-        turning_points = []
-        for i in range(len(v_r4)-1):
-            if abs(v_r4[i]- v_r4[i+1])>1e-2:
-                turning_points.append(i+1)
-        fluctuation_points_density = calculate_density(turning_points, 5, len(v_r4))
-        pyplot.plot([i*10 for i in fluctuation_points_density])
-        from scipy.signal import savgol_filter
+        self.chemical_outline
+        pyplot.plot(self.r4,"r-")
 
-        self.r4 = savgol_filter(self.r4, 31, 3)
-        pyplot.plot(self.r4[2:])
+
+        from scipy.ndimage.filters import gaussian_filter1d
+        gaussian = gaussian_filter1d(self.r4, sigma=3)
+        pyplot.plot(gaussian, "b-")
+
+        from scipy.signal import savgol_filter
+        savgol =  savgol_filter(self.r4, 31, 3)
+        pyplot.plot(savgol,"g-")
+
+        from scipy.signal import filtfilt, butter
+        b, a = butter(3, 0.05)
+        filt = filtfilt(b, a, self.r4)
+        pyplot.plot(filt, "y-")
+
+        # pyplot.plot(self.r4,"r")
+        #
+        # win_len_side = 4
+        # s_r4 = [self.r4[i + 1] - self.r4[i] for i in range(len(self.r4) - 1)]
+        # turning_points = []
+        # fluctuation = [0 for i in range(len(s_r4))]
+        # for i in range(len(s_r4)-1):
+        #     if is_positive(s_r4[i+1],False,1e-10) != is_positive(s_r4[i],False,1e-10):
+        #         turning_points.append(i+1)
+        #         for j in range(max(i-win_len_side,0),min(i+win_len_side,len(s_r4))):
+        #             fluctuation[j] += 1
+        #
+        # fluctuation = numpy.asarray(fluctuation)
+        # fluctuation_idx = list(numpy.where(fluctuation>=2)[0])
+        # print(fluctuation_idx[1])
+        # if fluctuation_idx:
+        #     fluctuation_points = [[]]
+        #     for i in range(fluctuation_idx[0], fluctuation_idx[-1]+1):
+        #         if i in fluctuation_idx:
+        #             fluctuation_points[-1].append(i)
+        #         elif fluctuation_points[-1]:
+        #             fluctuation_points.append([])
+        #
+        #     from scipy.optimize import curve_fit
+        #     def power_one_function(x, a, b):
+        #         return a*x +b
+        #     def power_two_function(x, a, b,c):
+        #         return a*x**2 + b*x +c
+        #     def power_three_function(x, a, b,c,d):
+        #         return a*x**3 + b*x**2 +c*x +d
+        #     for i in fluctuation_points:
+        #         if len(i)>win_len_side*2+1:
+        #             dir_line= []
+        #             for j in range(i[0]+win_len_side,i[-1]-win_len_side+1):
+        #                 dir_line.append(list(curve_fit(power_one_function,
+        #                                                list(range(j-win_len_side,j+win_len_side+1)),
+        #                                                 self.r4[j-win_len_side:j+win_len_side+1])[0]))
+        #                 new_plot([[i,power_one_function(i,dir_line[-1][0],dir_line[-1][1])]for i in range(j-win_len_side,j+win_len_side+1)])
+        #             print(dir_line)
+        #             pyplot.plot([i[0] for i in dir_line])
+        # new_plot([[i, self.r4[i]]for i in turning_points],"s")
+        # pyplot.plot([i * 10 for i in fluctuation], "r")
+        # from scipy.signal import savgol_filter
+        # self.r4 = savgol_filter(avg_r4, 31, 3)
+        # pyplot.plot(self.r4)
+
+        # x = numpy.asarray(self.r4)
+        # print(numpy.diff(x))
+        # pyplot.plot(numpy.diff(x),"y")
+        # jmps = numpy.where(abs(numpy.diff(x)) > 0.05)[0]  # find large, rapid drops in amplitdue
+        # print(jmps)
+        # for j in jmps:
+        #     x[j + 1:] += x[j] - x[j + 1]
+        # pyplot.plot(x, label='unrolled')
+        # turning_points = []
+        # s_r4 = [self.r4[i+1]-self.r4[i] for i in range(len(self.r4)-1)]
+        # v_r4 = [s_r4[i + 1] - s_r4[i] for i in range(len(s_r4) - 1)]
+        # a_r4 = [v_r4[i + 1] - v_r4[i] for i in range(len(v_r4) - 1)]
+        # # pyplot.plot(v_r4,)
+        # turning_points = []
+        # pyplot.plot([i*10 for i in v_r4])
+        # for i in range(len(a_r4)-1):
+        #     if is_positive(a_r4[i],False,1) !=0 and is_positive(a_r4[i+1],False,1) == -is_positive(a_r4[i],False,1):
+        #         turning_points.append(i+1)
+        # fluctuation_idx_density = calculate_density(turning_points, 5, len(a_r4))
+        # pyplot.plot([i * 10 for i in fluctuation_idx_density],"r")
+        # turning_points = []
+        #
+        # for i in range(len(v_r4)-1):
+        #     if abs(v_r4[i]- v_r4[i+1])>self.raw_attr.command_interval**2*self.raw_attr.motor_acc[4]:
+        #         turning_points.append(i+1)
+        # fluctuation_idx_density = calculate_density(turning_points, 5, len(v_r4))
+        # pyplot.plot([i*10 for i in fluctuation_idx_density])
+
         pyplot.show()
         # new_plot(self.chemical_outline, "-bo")
         # new_plot(self.chemical_origin, "-bo")
-        # # new_plot(chemical_outline, "-r*")
-        # # new_plot(chemical_origin, "-*r")
-        #
+        # new_plot(chemical_outline, "-r*")
+        # new_plot(chemical_origin, "-*r")
+
         new_plot(self.car)
-        new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
-                   self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
-                  range(len(self.chemical_origin))], "y*")
+        # new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
+        #            self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
+        #           range(len(self.chemical_origin))], "y*")
+        new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(filt[i])),
+                   self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(filt[i]))] for i in
+                  range(len(self.chemical_origin))], "y-")
         # from matplotlib import pyplot
         # pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "b+")
         new_plot(self.outline, "r--")

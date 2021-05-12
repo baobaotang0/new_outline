@@ -136,7 +136,7 @@ def interpolate_by_stepNum(outline: list, dis_num: int):
     return res
 
 
-def interpolate_by_stepLen_plus(outline: list, dis_step: float, additional_list: list):
+def interpolate_by_stepLen_plus(outline: list, dis_step: float, *args, **kwargs):
     vector = []
     addition_vector = []
     dis = [0]
@@ -383,7 +383,7 @@ def offset(original_line: list, radius: float, left: bool, is_hard=True):
     # for i, txt in enumerate(n):
     #     pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
     # for i in range(len(original_line)):
-        # new_plot([original_line[i], offset_hard[i]])
+    #     new_plot([original_line[i], offset_hard[i]])
     # pyplot.show()
 
 

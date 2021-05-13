@@ -212,42 +212,35 @@ class ChemicalBuilder(Builder):
         self.r4 = [calculate_angle_2points(self.chemical_origin[i], self.chemical_outline[i]) for i in
                    range(len(self.chemical_origin))]
 
-        pyplot.plot(self.r4, "r-")
 
         from scipy.signal import filtfilt, butter
         b, a = butter(3, 0.05)
         self.r4 = filtfilt(b, a, self.r4)
 
-        pyplot.plot(self.r4, "y-")
-        self.chemical_outline = [
-            [self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
-             self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
-            range(len(self.chemical_origin))]
-        self.chemical_outline, self.chemical_origin, self.r4 = interpolate_by_stepLen_plus(self.chemical_outline,
-                                                                                           self.raw_attr.line_speed * self.raw_attr.command_interval,
-                                                                                           self.chemical_origin, self.r4)
-
-
-
-        new_plot(self.chemical_outline, "-bo")
-        new_plot(self.chemical_origin, "-bo")
-        # new_plot(chemical_outline, "-r*")
-        # new_plot(chemical_origin, "-*r")
-
-        new_plot(self.car)
-        # new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
-        #            self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
-        #           range(len(self.chemical_origin))], "y*")
-
-        # from matplotlib import pyplot
-        # pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "b+")
-        new_plot(self.outline, "r--")
-        # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][0], self.raw_attr.motor_range[2][0]])
-        # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][1], self.raw_attr.motor_range[2][1]])
-        pyplot.axis('equal')
-        pyplot.xlim(0, 7)
-        pyplot.ylim(0, 3)
-        pyplot.show()
+        self.chemical_origin = [
+            [self.chemical_outline[i][0] - self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
+             self.chemical_outline[i][1] - self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
+            range(len(self.chemical_outline))]
+        # pyplot.figure(figsize=(20, 12))
+        # new_plot(self.chemical_outline, "-bo")
+        # new_plot(self.chemical_origin, "-b*")
+        # # new_plot(chemical_outline, "-r*")
+        # # new_plot(chemical_origin, "-*r")
+        #
+        # new_plot(self.car)
+        # # new_plot([[self.chemical_origin[i][0] + self.raw_attr.l1_length * math.cos(math.radians(self.r4[i])),
+        # #            self.chemical_origin[i][1] + self.raw_attr.l1_length * math.sin(math.radians(self.r4[i]))] for i in
+        # #           range(len(self.chemical_origin))], "y*")
+        #
+        # # from matplotlib import pyplot
+        # # pyplot.plot([p[1][0] for p in self.idx_down_car], [p[1][1] for p in self.idx_down_car], "b+")
+        # new_plot(self.outline, "r--")
+        # # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][0], self.raw_attr.motor_range[2][0]])
+        # # pyplot.plot(self.raw_attr.motor_range[1], [self.raw_attr.motor_range[2][1], self.raw_attr.motor_range[2][1]])
+        # pyplot.axis('equal')
+        # pyplot.xlim(0, 7)
+        # pyplot.ylim(0, 3)
+        # pyplot.show()
 
     def _get_front_behind_xyzr4(self):
         cutting_points = [1, len(self.chemical_origin)]
@@ -318,6 +311,7 @@ class ChemicalBuilder(Builder):
             time_step[2].append(max(t))
             self.time_step.append(max(time_step[1][i], time_step[2][i], self.raw_attr.command_interval))
         #
+        pyplot.figure(figsize=(20, 12))
         real_x_ft = compute_one(self.time_step, [i[0] for i in self.front_xyzr4], self.raw_attr.motor_vel[1],
                                self.raw_attr.motor_acc[1])
         real_y_ft = compute_one(self.time_step, [i[1] for i in self.front_xyzr4], self.raw_attr.motor_vel[2],

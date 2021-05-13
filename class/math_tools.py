@@ -54,7 +54,10 @@ def is_in_circle(center: list, radius: float, point: list):
 
 
 def get_vector(point1, point2):
-    return [point2[0] - point1[0], point2[1] - point1[1]]
+    if isinstance(point1, list):
+        return [point2[i] - point1[i] for i in range(len(point1))]
+    else:
+        return point2-point1
 
 
 def get_unit_vector(point1, point2):
@@ -138,30 +141,37 @@ def interpolate_by_stepNum(outline: list, dis_num: int):
 
 def interpolate_by_stepLen_plus(outline: list, dis_step: float, *args, **kwargs):
     vector = []
-    addition_vector = []
+    addition_vector = [[]for i in range(len(args))]
     dis = [0]
     for i in range(1, len(outline)):
         vector.append(get_vector(outline[i - 1], outline[i]))
-        addition_vector.append(get_vector(additional_list[i - 1], additional_list[i]))
+        for j in range(len(args)):
+            addition_vector[j].append(get_vector(args[j][i - 1], args[j][i]))
         dis.append(dis[i - 1] + calculate_dis(outline[i - 1], outline[i]))
     count = int(dis[-1] // dis_step)
     j = 0
-    res, addition_res = [], []
+    res = []
+    addition_res = [[]for i in range(len(args))]
     for i in range(count + 1):
         dis_cur = dis_step * i
         while dis_cur - dis[j + 1] > 1e-6:
             j += 1
         percent = (dis_cur - dis[j]) / (dis[j + 1] - dis[j])
         res.append([outline[j][0] + percent * vector[j][0], outline[j][1] + percent * vector[j][1]])
-        addition_res.append([additional_list[j][0] + percent * addition_vector[j][0],
-                             additional_list[j][1] + percent * addition_vector[j][1]])
+        for k in range(len(args)):
+            if isinstance(args[k][0], list):
+                addition_res[k].append([args[k][j][x] + percent * addition_vector[k][j][x] for x in range(len(args[k][0]))])
+            else:
+                addition_res[k].append(args[k][j] + percent * addition_vector[k][j])
     if calculate_dis(res[-1], outline[-1]) > dis_step / 2:
         res.append(outline[-1])
-        addition_res.append(additional_list[-1])
+        for k in range(len(args)):
+            addition_res[k].append(args[k][-1])
     else:
         res[-1] = outline[-1]
-        addition_res[-1] = additional_list[-1]
-    return res, addition_res
+        for k in range(len(args)):
+            addition_res[k][-1] = args[k][-1]
+    return res, *addition_res
 
 
 def find_horline_outline_intersection(outline: list, line_y: float, start_idx=None, end_idx=None, up=False):

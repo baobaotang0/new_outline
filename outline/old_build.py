@@ -49,3 +49,8 @@ outline_cur.sort(key=takeFirst)
         else:
             outline_cur = []
 
+for i in range(50):
+    if not os.path.exists(f"car_{i}_{bid}.npy"):
+        with open(f"car_{i}_{bid}.npy", "wb") as fp:
+            pickle.dump((o, commands[bid], self.raw_attr.raw_xy), fp)
+        break

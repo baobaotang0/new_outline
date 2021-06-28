@@ -18,13 +18,21 @@ def takeFirst(elem):
     return elem[0]
 
 
-def is_positive(num: float):
-    if num > 0:
-        return 1
-    elif num == 0:
-        return 0
+def is_positive(num: float,is_strict=True,loose_range=1e-8):
+    if is_strict:
+        if num > 0:
+            return 1
+        elif num == 0:
+            return 0
+        else:
+            return -1
     else:
-        return -1
+        if num > loose_range:
+            return 1
+        elif num < -loose_range:
+            return -1
+        else:
+            return 0
 
 
 def is_clockwise(xyz_list: list):
@@ -46,7 +54,10 @@ def is_in_circle(center: list, radius: float, point: list):
 
 
 def get_vector(point1, point2):
-    return [point2[0] - point1[0], point2[1] - point1[1]]
+    if isinstance(point1, list):
+        return [point2[i] - point1[i] for i in range(len(point1))]
+    else:
+        return point2-point1
 
 
 def get_unit_vector(point1, point2):
@@ -74,6 +85,18 @@ def calculate_angle_2points(point1: list, point2: list, smaller_than_0=True) -> 
     return angle
 
 
+def calculate_density(data: list, window_len_1side: int, total_len: int):
+    if total_len <= window_len_1side:
+        return f"窗口太长，单侧范围最大为{len(data) - 1}"
+    y = [1 if i in data else 0 for i in range(total_len)]
+    new_data = [0] * window_len_1side + y + [0] * window_len_1side
+    density = []
+    for i in range(window_len_1side, len(new_data) - window_len_1side):
+        density.append(sum(
+            [new_data[j] / math.sqrt(1 + (j - i) ** 2) for j in range(i - window_len_1side, i + window_len_1side)]))
+    return density
+
+
 def interpolate_by_stepLen(outline: list, dis_step: float):
     """需要提前检查重合点"""
     vector = []
@@ -86,8 +109,6 @@ def interpolate_by_stepLen(outline: list, dis_step: float):
     res = []
     for i in range(count + 1):
         dis_cur = dis_step * i
-        if i >= count:
-            pass
         while dis_cur - dis[j + 1] > 1e-6:
             j += 1
         percent = (dis_cur - dis[j]) / (dis[j + 1] - dis[j])
@@ -118,32 +139,39 @@ def interpolate_by_stepNum(outline: list, dis_num: int):
     return res
 
 
-def interpolate_by_stepLen_plus(outline: list, dis_step: float, additional_list: list):
+def interpolate_by_stepLen_plus(outline: list, dis_step: float, *args, **kwargs):
     vector = []
-    addition_vector = []
+    addition_vector = [[]for i in range(len(args))]
     dis = [0]
     for i in range(1, len(outline)):
         vector.append(get_vector(outline[i - 1], outline[i]))
-        addition_vector.append(get_vector(additional_list[i - 1], additional_list[i]))
+        for j in range(len(args)):
+            addition_vector[j].append(get_vector(args[j][i - 1], args[j][i]))
         dis.append(dis[i - 1] + calculate_dis(outline[i - 1], outline[i]))
     count = int(dis[-1] // dis_step)
     j = 0
-    res, addition_res = [], []
+    res = []
+    addition_res = [[]for i in range(len(args))]
     for i in range(count + 1):
         dis_cur = dis_step * i
         while dis_cur - dis[j + 1] > 1e-6:
             j += 1
         percent = (dis_cur - dis[j]) / (dis[j + 1] - dis[j])
         res.append([outline[j][0] + percent * vector[j][0], outline[j][1] + percent * vector[j][1]])
-        addition_res.append([additional_list[j][0] + percent * addition_vector[j][0],
-                             additional_list[j][1] + percent * addition_vector[j][1]])
+        for k in range(len(args)):
+            if isinstance(args[k][0], list):
+                addition_res[k].append([args[k][j][x] + percent * addition_vector[k][j][x] for x in range(len(args[k][0]))])
+            else:
+                addition_res[k].append(args[k][j] + percent * addition_vector[k][j])
     if calculate_dis(res[-1], outline[-1]) > dis_step / 2:
         res.append(outline[-1])
-        addition_res.append(additional_list[-1])
+        for k in range(len(args)):
+            addition_res[k].append(args[k][-1])
     else:
         res[-1] = outline[-1]
-        addition_res[-1] = additional_list[-1]
-    return res, addition_res
+        for k in range(len(args)):
+            addition_res[k][-1] = args[k][-1]
+    return res, *addition_res
 
 
 def find_horline_outline_intersection(outline: list, line_y: float, start_idx=None, end_idx=None, up=False):
@@ -282,7 +310,7 @@ def unify_list(l: list):
     return res
 
 
-def offset(original_line: list, radius: float, left: bool):
+def offset(original_line: list, radius: float, left: bool, is_hard=True):
     if left:
         rotate = 90
     else:
@@ -307,11 +335,17 @@ def offset(original_line: list, radius: float, left: bool):
                         math.cos(math.radians(bisector_angle)) * original_line[i][1]]
             line1 = get_line_function_with_2points(original_line[i], original_line[i - 1])
             para_line1 = [line1[0], line1[1], -line1[0] * point0[0] - line1[1] * point0[1]]
-            offset_hard.append(get_2line_intersection(para_line1, bisector))
+            hard_point = get_2line_intersection(para_line1, bisector)
+            if is_hard:
+                offset_hard.append(hard_point)
+            else:
+                unit_bisector_vector = get_unit_vector(original_line[i],hard_point)
+                offset_hard.append([original_line[i][0]+unit_bisector_vector[0]*radius,
+                                    original_line[i][1]+unit_bisector_vector[1]*radius])
     angle0 = calculate_angle_2points(original_line[-2], original_line[-1]) + rotate
     vector0 = [math.cos(math.radians(angle0)) * radius, math.sin(math.radians(angle0)) * radius]
     offset_hard.append([original_line[-1][0] + vector0[0], original_line[-1][1] + vector0[1]])
-
+    # 检查交叉线
     checklist = {}
     min_point_dis = min([calculate_dis(original_line[i], original_line[i - 1]) for i in range(len(original_line))])
     searching_len = math.ceil(radius * 2 / min_point_dis)
@@ -345,15 +379,36 @@ def offset(original_line: list, radius: float, left: bool):
             end = min(i[1] + 1, len(offset_hard) - 1)
             x = list(numpy.linspace(offset_hard[start][0], offset_hard[end][0], end - start + 1))
             y = list(numpy.linspace(offset_hard[start][1], offset_hard[end][1], end - start + 1))
-            offset_hard[start:end + 1] = [[x[i], y[i]] for i in range(len(x))]
+            if is_hard:
+                offset_hard[start:end + 1] = [[x[j], y[j]] for j in range(len(x))]
+            else:
+                for j in range(len(x)):
+                    local_vector = get_unit_vector(original_line[start+j], [x[j], y[j]])
+                    offset_hard[start+j] = [original_line[start+j][0]+local_vector[0]*radius,
+                                            original_line[start+j][1]+local_vector[1]*radius]
 
-    # new_plot(original_line)
+    # new_plot(original_line,"b")
+    #
     # n = numpy.arange(len(offset_hard))
     # for i, txt in enumerate(n):
     #     pyplot.annotate(txt, (offset_hard[i][0], offset_hard[i][1]))
-    #
     # for i in range(len(original_line)):
     #     new_plot([original_line[i], offset_hard[i]])
+    # pyplot.show()
+
+
+    # angle = []
+    # for i in range(len(original_line)):
+    #     angle.append(calculate_angle_2points(offset_hard[i], original_line[i]))
+    #
+    # from scipy.signal import savgol_filter
+    # yhat = savgol_filter(angle, 51, 3)
+    # # pyplot.plot(angle,"*-")
+    # # pyplot.plot(yhat,"*-")
+    # new_outline = [[offset_hard[i][0] + radius*math.cos(math.radians(yhat[i])),
+    #                offset_hard[i][1] + radius*math.sin(math.radians(yhat[i]))]
+    #                for i in range(len(yhat))]
+    # new_plot(new_outline,"r")
     #
     # pyplot.show()
     return offset_hard
@@ -401,7 +456,7 @@ def get_inscribed_circle(left_2point: list, right_2point: list):
     return radius, center, near_flag
 
 
-def build_circle(center: list, radius: float, lineNum=12):
+def build_cicle(center: list, radius: float, lineNum=12):
     theta = numpy.linspace(0, math.pi * 2, lineNum)
     res = []
     for i in theta:

@@ -123,14 +123,13 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
     folder_path = "2dcars/"
     car_id = os.listdir(folder_path)
     for i in car_id:
-        # if i not in  ["2dcar_01.npy"]:
+        # if i not in  ["2dcar_22.npy"]:
         #     continue
         if i.endswith("npy"):
             print(i)
             path2d = "2dcars/" + i
             with open(path2d, 'rb') as f_pos:
                 car = list(numpy.load(f_pos))
-
                 for point in car:
                     if point[1] + dis > highest:
                         point[1] = highest - dis
@@ -139,13 +138,14 @@ def load_outline(type: str, dis: float, highest:float, rough_para=0.8 ):
                 patch = points.buffer(rough_para)
                 patch = patch.buffer(dis - rough_para)
                 circle = list(patch.exterior.coords)
-                res = [[p[0], p[1], 0] for p in circle]
+                res = [[p[0], p[1]] for p in circle]
                 res = cut_xy_spline(res, 0.15)
                 xy_head_end_filter(res)
                 if type == "long":
                     res_2d = [[i[0] for i in res], [i[1] for i in res]]
                 else:
                     res_2d = [[p[0], p[1]] for p in res]
+                print(res[0])
                 yield res_2d, new_car
 
 

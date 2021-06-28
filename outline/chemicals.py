@@ -2,12 +2,12 @@ import math
 
 import numpy
 from matplotlib import pyplot
-
+from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
 from build_outline import load_outline
 from build_tools import interpolate_by_stepLen, unify_list, offset, \
-    calculate_angle, cut_outline_with_horline, rebuild_outline, make_ends, round_connect, new_plot, \
-    interpolate_by_stepLen_plus, is_in_circle, build_cicle, find_horline_outline_intersection, get_unit_vector, \
-    is_positive
+    calculate_angle_2points, cut_outline_with_horline, rebuild_outline, make_ends, round_connect, new_plot, \
+    interpolate_by_stepLen_plus, is_in_circle, find_horline_outline_intersection, get_unit_vector, \
+    is_positive, calculate_dis
 
 motor_range = {2: [1, 1.78], 4: [-125, 125], 1: [0.75, 6.35]}
 line_speed = 0.3
@@ -18,10 +18,6 @@ command_interval = 0.1
 l1_length = 0.35
 motor_velmax = {1: 0.3, 2: 0.2, 3: 0.1, 4: 20, 6: 20}
 time_step_min = .02
-
-
-def takeFirst(elem):
-    return elem[0]
 
 
 def get_straightline_outline(origin_bds: list, r4_bds: list):
@@ -40,23 +36,25 @@ def get_straightline_outline(origin_bds: list, r4_bds: list):
 
 def exam_boundary(boundary: list, offset_outline: list, origin_line: list, left: bool):
     cnt = len(origin_line)
-    def generate_range(front:bool, turnning_point:int,length):
+
+    def generate_range(front: bool, turnning_point: int, length):
         if front:
-            return [0,turnning_point]
+            return [0, turnning_point]
         else:
-            return [turnning_point,length]
+            return [turnning_point, length]
+
     if left:
         idx = 0
         research_para = [1, len(offset_outline), 1]
         compare_sign = 1
-        range1 = lambda x:generate_range(front=True,turnning_point=x, length=cnt)
-        range2 = lambda x:generate_range(front=False,turnning_point=x, length=cnt)
+        range1 = lambda x: generate_range(front=True, turnning_point=x, length=cnt)
+        range2 = lambda x: generate_range(front=False, turnning_point=x, length=cnt)
     else:
         idx = -1
         research_para = [len(offset_outline) - 2, -1, -1]
         compare_sign = -1
-        range1 = lambda x:generate_range(front=False,turnning_point=x, length=cnt)
-        range2 = lambda x:generate_range(front=True,turnning_point=x, length=cnt)
+        range1 = lambda x: generate_range(front=False, turnning_point=x, length=cnt)
+        range2 = lambda x: generate_range(front=True, turnning_point=x, length=cnt)
     if abs(boundary[idx][0][0] - origin_line[idx][0]) < 2 * l1_length:
         turnning_point = None
         last_circle_flag = is_in_circle(boundary[idx][0], l1_length, offset_outline[idx])
@@ -64,18 +62,17 @@ def exam_boundary(boundary: list, offset_outline: list, origin_line: list, left:
             current_circle_flag = is_in_circle(boundary[idx][0], l1_length, offset_outline[i])
             if last_circle_flag in [1, 0] and current_circle_flag == -1:
                 turnning_point = i
-                print("circle_intersection", i)
+                # print("circle_intersection", i)
                 break
             last_circle_flag = current_circle_flag
         if turnning_point:
-            bds_angle = calculate_angle(origin_line[turnning_point], offset_outline[turnning_point])
-            print(bds_angle, boundary[idx][1])
-            if is_positive(bds_angle - boundary[idx][1]) in [compare_sign,0]:
+            bds_angle = calculate_angle_2points(origin_line[turnning_point], offset_outline[turnning_point])
+            if is_positive(bds_angle - boundary[idx][1]) in [compare_sign, 0]:
                 vector = get_unit_vector(origin_line[turnning_point], offset_outline[turnning_point])
                 vector = [vector[0] * l1_length, vector[1] * l1_length]
                 offset_outline[idx] = [origin_line[idx][0] + vector[0], origin_line[idx][1] + vector[1]]
                 outline_point = find_horline_outline_intersection(outline=outline, line_y=offset_outline[idx][1])
-                if is_positive(offset_outline[idx][0]-outline_point[idx][0]) in [compare_sign, 0]:
+                if is_positive(offset_outline[idx][0] - outline_point[idx][0]) in [compare_sign, 0]:
                     offset_outline[range1(turnning_point)[0]:range1(turnning_point)[1]] = \
                         [[i[0] + vector[0], i[1] + vector[1]] for i in
                          origin_line[range1(turnning_point)[0]:range1(turnning_point)[1]]]
@@ -165,7 +162,7 @@ def line_filter(time_step, source, limit_acc):
 
 
 def compute_one(cmt_t, cmd1, vmax, acc):
-    from motor import build_math_path, get_math_spd_by_ts, get_pos_by_ts
+
     pos = [cmd1[0]]
     v = [0]
     offset = [0]
@@ -179,16 +176,25 @@ def compute_one(cmt_t, cmd1, vmax, acc):
     return pos
 
 
+def real_vt(t: list, time_list: list, spd_list: list, moment: list):
+    j = 0
+    res = []
+    for i in range(len(moment)):
+        while moment[i] > t[j + 1]:
+            j += 1
+        res.append(get_math_spd_by_ts(moment[i] - [t[j]], time_list[j], spd_list[j])[0])
+    return res
+
 if __name__ == '__main__':
-    r4_y_min = motor_range[2][0] + l1_length * math.cos(math.radians(motor_range[4][0]))
     outline_step_min = time_step_min * motor_velmax[1] + math.tan(
         math.radians(time_step_min * motor_velmax[4])) * l1_length
     loose_step_len = {}
     for num, vel in motor_velmax.items():
-        loose_step_len[num] = time_step_min * vel * 5
+        loose_step_len[num] = time_step_min * vel * 1
 
     for outline, car in load_outline(type="short", dis=shoot_range_xy, highest=motor_range[2][1] + l1_length):
         # outline = interpolate_by_stepLen(outline, 0.01)
+
         car = rebuild_outline(line=car, line_y=motor_range[2][0])
 
         # 寻找最低能射到的地方
@@ -201,11 +207,11 @@ if __name__ == '__main__':
         idx_down_car = [[0, down_car[0], 180], [0, down_car[0], 0]]
         r4_down_car = [[], []]
         for i in range(len(down_car)):
-            cur_r4 = calculate_angle(point1=down_car[i], point2=[motor_range[1][1], motor_range[2][0]])
+            cur_r4 = calculate_angle_2points(point1=down_car[i], point2=[motor_range[1][1], motor_range[2][0]])
             r4_down_car[1].append(cur_r4)
             if cur_r4 > idx_down_car[1][2]:
                 idx_down_car[1] = [i, down_car[i], cur_r4]
-            cur_r4 = calculate_angle(point1=down_car[i], point2=[motor_range[1][0], motor_range[2][0]])
+            cur_r4 = calculate_angle_2points(point1=down_car[i], point2=[motor_range[1][0], motor_range[2][0]])
             r4_down_car[0].append(cur_r4)
             if cur_r4 < idx_down_car[0][2]:
                 idx_down_car[0] = [i, down_car[i], cur_r4]
@@ -220,67 +226,63 @@ if __name__ == '__main__':
             displaced_car = make_ends(displaced_car, motor_range[2][0])
             displaced_car = interpolate_by_stepLen(displaced_car, loose_step_len[1])
             hard_offset_car = offset(displaced_car, l1_length, True)
-            boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary,offset_outline=hard_offset_car,
-                                                                     origin_line=displaced_car,left=True)
+            boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary, offset_outline=hard_offset_car,
+                                                                     origin_line=displaced_car, left=True)
             boundary, hard_offset_car, displaced_car = exam_boundary(boundary=boundary, offset_outline=hard_offset_car,
                                                                      origin_line=displaced_car, left=False)
             outline_left, origin_left = get_straightline_outline(origin_bds=[boundary[0][0], displaced_car[0]],
                                                                  r4_bds=[boundary[0][1],
-                                                                         calculate_angle(displaced_car[0],
-                                                                                         hard_offset_car[0],
-                                                                                         False)])
+                                                                         calculate_angle_2points(displaced_car[0],
+                                                                                                 hard_offset_car[0],
+                                                                                                 False)])
             outline_right, origin_right = get_straightline_outline(origin_bds=[displaced_car[-1], boundary[-1][0]],
-                                                                   r4_bds=[calculate_angle(displaced_car[-1],
-                                                                                           hard_offset_car[-1]),
+                                                                   r4_bds=[calculate_angle_2points(displaced_car[-1],
+                                                                                                   hard_offset_car[-1]),
                                                                            boundary[-1][1]])
             chemical_outline = round_connect([outline_left, hard_offset_car, outline_right])
             chemical_origin = round_connect([origin_left, displaced_car, origin_right])
-            r4 = [calculate_angle(chemical_origin[i], chemical_outline[i]) for i in range(len(chemical_origin))]
-
-
-            new_chemical_outline, new_chemical_origin = interpolate_by_stepLen_plus(chemical_outline,
-                                                                                    outline_step_min, chemical_origin)
-            new_r4 = [calculate_angle(new_chemical_origin[i], new_chemical_outline[i]) for i in
-                      range(len(new_chemical_origin))]
-
-
+            r4 = [calculate_angle_2points(chemical_origin[i], chemical_outline[i]) for i in range(len(chemical_origin))]
         else:
-            chemicial_outline, chemicial_origin = get_straightline_outline(x_bds=[boundary[0][0][0], boundary[1][0][0]],
-                                                                           r4_bds=[boundary[0][1], boundary[1][1]])
+            chemical_outline, chemical_origin = get_straightline_outline(origin_bds=[boundary[0][0], boundary[1][0]],
+                                                                         r4_bds=[boundary[0][1], boundary[1][1]])
+        new_chemical_outline, new_chemical_origin = interpolate_by_stepLen_plus(chemical_outline,
+                                                                                outline_step_min, chemical_origin)
+        new_r4 = [calculate_angle_2points(new_chemical_origin[i], new_chemical_outline[i]) for i in
+                  range(len(new_chemical_origin))]
 
-        pyplot.figure(figsize=(7, 3))
-        new_plot(chemical_origin, "o-")
-        new_plot(chemical_outline, "o-")
-        # new_plot(new_chemical_outline,"g-*")
-        # new_plot(new_chemical_origin, "b-*")
-        new_plot(hard_offset_car)
-        # new_plot(outline, "g--")
-        # # new_plot(down_car)
-        #
-        # new_plot(car)
-        #
-        # # for i in chemicial_origin:
-        # #     new_plot(build_cicle(i, l1_length))
+
+        cutting_points = [1, len(chemical_origin)]
+        for i in range(len(chemical_outline)):
+            if calculate_dis(chemical_outline[i], chemical_outline[0]) > dis_l1l1:
+                cutting_points[0] = i
+                break
+        for i in range(len(chemical_outline) - 1, -1, -1):
+            if calculate_dis(chemical_outline[i], chemical_outline[-1]) > dis_l1l1:
+                cutting_points[1] = i
+                break
+        extention_len = max(cutting_points[0], len(self.chemical_origin) - 1 - cutting_points[1])
+        # pyplot.figure(figsize=(7, 3))
+        new_plot(chemical_origin, "-*")
+        new_plot(new_chemical_outline, "-*")
+        new_plot(new_chemical_origin, "-*")
+        new_plot(outline, "r--")
+        new_plot(car)
         # for i in range(len(new_r4)):
         #     pyplot.plot([new_chemical_origin[i][0] + math.cos(math.radians(new_r4[i])) * l1_length, new_chemical_origin[i][0]],
         #                 [new_chemical_origin[i][1] + math.sin(math.radians(new_r4[i])) * l1_length, new_chemical_origin[i][1]], "c")
-        # new_plot([[new_chemical_origin[i][0] + math.cos(math.radians(new_r4[i])) * l1_length,
-        #              new_chemical_origin[i][1] + math.sin(math.radians(new_r4[i])) * l1_length] for i in range(len(new_r4))],"r+")
-        # pyplot.plot([x[i] + math.cos(math.radians(r4[i])) * l1_length for i in range(len(r4))],
-        #             [y[i] + math.sin(math.radians(r4[i])) * l1_length for i in range(len(r4))])
-        # n = numpy.arange(len(chemicial_origin))
+        # n = numpy.arange(len(new_chemical_outline))
         # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (chemicial_origin[i][0], chemicial_origin[i][1]))
-        # n = numpy.arange(len(chemicial_outline))
-        # for i, txt in enumerate(n):
-        #     pyplot.annotate(txt, (chemicial_outline[i][0], chemicial_outline[i][1]))
+        #     pyplot.annotate(txt, (new_chemical_outline[i][0], new_chemical_outline[i][1]))
         pyplot.plot([p[1][0] for p in idx_down_car], [p[1][1] for p in idx_down_car], "bo")
         pyplot.plot(motor_range[1], [motor_range[2][0], motor_range[2][0]])
-        # pyplot.plot([order[0][i] + math.cos(math.radians(order[3][i]+90)) * l1_length for i in range(len(order[0]))],
-        #             [order[1][i] + math.sin(math.radians(order[3][i]+90)) * l1_length for i in range(len(order[0]))], "y*")
+        pyplot.plot(motor_range[1], [motor_range[2][1], motor_range[2][1]])
+        pyplot.axis('equal')
         pyplot.xlim(0, 7)
         pyplot.ylim(0, 3)
+
         pyplot.show()
+        #
+
         acc_list = [.5, .3, 60]
         vel_list = [.3, .2, 20]
         ts = []
@@ -349,32 +351,3 @@ if __name__ == '__main__':
         new_plot(chemical_outline)
 
         pyplot.show()
-
-        # origin_left = interpolate_by_stepLen([boundary[0][0], down_car[0]], time_step_min * motor_velmax[1])
-        # origin_right = interpolate_by_stepLen([down_car[-1], boundary[-1][0]], time_step_min * motor_velmax[1])
-        # chemicial_origin, round_list = round_connect([origin_left, down_car, origin_right])
-        # left, right = round_list[0][0], round_list[1][1]
-        # print(round_list)
-        # print(left, right)
-        # chemical_outline = offset(chemicial_origin, l1_length, True)
-        # r4 = [calculate_angle(chemicial_origin[i], chemical_outline[i]) for i in range(len(chemical_outline))]
-        # pos1 = find_horline_outline_intersection([[i, r4[i]] for i in range(len(r4))], boundary[0][1])
-        # pos2 = find_horline_outline_intersection([[i, r4[i]] for i in range(len(r4))], boundary[1][1])
-        # print("*********", pos1, pos2)
-        # if pos1:
-        #     r4[:pos1[0][0]] = [boundary[0][1]] * pos1[0][0]
-        # else:
-        #     start = int((round_list[0][0] + round_list[0][1]) / 2)
-        #     r4[:start + 1] = list(numpy.linspace(boundary[0][1], r4[start], start))
-        # if pos2:
-        #     r4[pos2[-1][0]:] = [boundary[1][1]] * (len(chemical_outline) - pos2[-1][0])
-        # else:
-        #     start = int((round_list[1][0] + round_list[1][1]) / 2)
-        #     print(len(r4) - start, start)
-        #     r4[start:] = list(numpy.linspace(r4[start], boundary[1][1], len(r4) - start))
-        # pyplot.subplot(2, 1, 1)
-        # pyplot.plot(r4)
-        # new_plot([i[1] for i in pos1])
-        # new_plot([i[1] for i in pos2])
-
-        # pyplot.subplot(2, 1, 2)
